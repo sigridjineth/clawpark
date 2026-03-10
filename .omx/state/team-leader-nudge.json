@@ -1,0 +1,19 @@
+{
+  "last_nudged_by_team": {
+    "rework-clawpark-around-actual": {
+      "at": "2026-03-10T19:26:31.584Z",
+      "last_message_id": "a1ca88b5-e92d-4bf3-bb2e-42dc0ce0789f",
+      "reason": "new_mailbox_message"
+    }
+  },
+  "last_idle_nudged_by_team": {},
+  "progress_by_team": {
+    "rework-clawpark-around-actual": {
+      "signature": "{\"tasks\":[{\"id\":\"1\",\"owner\":\"worker-1\",\"status\":\"completed\"},{\"id\":\"2\",\"owner\":\"worker-2\",\"status\":\"in_progress\"},{\"id\":\"3\",\"owner\":\"worker-3\",\"status\":\"completed\"}],\"workers\":[{\"worker\":\"worker-1\",\"state\":\"idle\",\"current_task_id\":\"\",\"status_missing\":false,\"turn_count\":1,\"heartbeat_missing\":false},{\"worker\":\"worker-2\",\"state\":\"blocked\",\"current_task_id\":\"\",\"status_missing\":false,\"turn_count\":1,\"heartbeat_missing\":false},{\"worker\":\"worker-3\",\"state\":\"idle\",\"current_task_id\":\"\",\"status_missing\":false,\"turn_count\":3,\"heartbeat_missing\":false}]}",
+      "last_progress_at": "2026-03-10T19:26:31.584Z",
+      "observed_at": "2026-03-10T19:26:55.073Z",
+      "missing_signal_workers": 0,
+      "work_remaining": true
+    }
+  }
+}

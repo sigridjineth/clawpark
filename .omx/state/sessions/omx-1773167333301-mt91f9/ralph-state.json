@@ -1,0 +1,26 @@
+{
+  "active": false,
+  "iteration": 10,
+  "max_iterations": 10,
+  "current_phase": "complete",
+  "started_at": "2026-03-10T19:06:00Z",
+  "task_description": "Rework ClawPark around OpenClaw dimensions and Jurassic Park-style genome UX",
+  "context_snapshot_path": ".omx/context/clawpark-openclaw-genome-pass-20260310T191519Z.md",
+  "prd_path": ".omx/plans/prd-clawpark-openclaw-genome.md",
+  "test_spec_path": ".omx/plans/test-spec-clawpark-openclaw-genome.md",
+  "linked_team": "rework-clawpark-around-actual",
+  "linked_team_target": "omx-hackathon-new-again-detached-1773167333371-95hvyg:0",
+  "last_turn_at": "2026-03-10T19:26:55.066Z",
+  "completed_at": "2026-03-10T19:00:30Z",
+  "team": "overhaul-clawpark-ux-ui-to-fee",
+  "team_shutdown": "complete",
+  "final_verification": {
+    "test": "pass",
+    "lint": "pass",
+    "build": "pass",
+    "diagnostics": "pass"
+  },
+  "architect_review": "approved",
+  "reference": "https://www.cryptokitties.co",
+  "stop_reason": "max_iterations_reached"
+}

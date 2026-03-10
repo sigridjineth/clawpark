@@ -1,0 +1,72 @@
+{
+  "active": false,
+  "mode": "team",
+  "iteration": 0,
+  "max_iterations": 50,
+  "current_phase": "cancelled",
+  "task_description": "Rework ClawPark around actual OpenClaw-style dimensions based on official docs: IDENTITY, SOUL, SKILLS, TOOLS (plus USER context only if useful, not a primary breeding axis). Preserve existing working app, demo mode, and recursive lineage. Replace the fictional trait framing with an OpenClaw genome model that clearly shows what each dimension is, what gets inherited, fused, or mutated during breeding, and present it in a concise Jurassic Park-style lab UX/UI. Use .omx/plans/prd-clawpark-openclaw-genome.md and .omx/plans/test-spec-clawpark-openclaw-genome.md. No new dependencies. Split lanes across: (1) data model + engine, (2) UI/UX overhaul and visual explanation, (3) tests/verification.",
+  "started_at": "2026-03-10T19:15:40.738Z",
+  "tmux_pane_id": "%94",
+  "tmux_pane_set_at": "2026-03-10T19:15:40.738Z",
+  "linked_ralph": true,
+  "team_name": "rework-clawpark-around-actual",
+  "agent_count": 3,
+  "agent_types": "executor",
+  "available_agent_types": [
+    "analyst",
+    "api-reviewer",
+    "architect",
+    "build-fixer",
+    "code-reviewer",
+    "code-simplifier",
+    "critic",
+    "debugger",
+    "deep-executor",
+    "dependency-expert",
+    "designer",
+    "executor",
+    "explore",
+    "git-master",
+    "information-architect",
+    "performance-reviewer",
+    "planner",
+    "product-analyst",
+    "product-manager",
+    "qa-tester",
+    "quality-reviewer",
+    "quality-strategist",
+    "researcher",
+    "scientist",
+    "security-reviewer",
+    "sisyphus-lite",
+    "style-reviewer",
+    "test-engineer",
+    "ux-researcher",
+    "verifier",
+    "vision",
+    "writer"
+  ],
+  "staffing_summary": "test-engineer x1 (primary delivery lane, medium reasoning); test-engineer x1 (verification + regression lane, medium reasoning); designer x1 (specialist support lane, medium reasoning)",
+  "staffing_allocations": [
+    {
+      "role": "test-engineer",
+      "count": 1,
+      "reason": "primary delivery lane",
+      "reasoningEffort": "medium"
+    },
+    {
+      "role": "test-engineer",
+      "count": 1,
+      "reason": "verification + regression lane",
+      "reasoningEffort": "medium"
+    },
+    {
+      "role": "designer",
+      "count": 1,
+      "reason": "specialist support lane",
+      "reasoningEffort": "medium"
+    }
+  ],
+  "completed_at": "2026-03-10T19:29:01.790Z",
+  "last_turn_at": "2026-03-10T19:28:34.265Z"
+}
