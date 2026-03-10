@@ -1,11 +1,11 @@
 import { resolveArchetype } from './archetype';
 import { inheritSkillBadges, inheritSoulTraits, inheritToolBadges } from './inherit';
 import { attemptMutation } from './mutate';
-import { fuseIdentity, getClawTools } from './openclaw';
+import { buildBreedingConversation, buildChildDoctrine, fuseIdentity, getClawTools } from './openclaw';
 import { generateVisual } from './visual';
 import { isDemoShowcasePair, resolveBreedSeed } from '../utils/demoMode';
 import { createSeededRng, pickWithRng } from '../utils/random';
-import type { BreedRequest, BreedResult } from '../types/claw';
+import type { BreedRequest, BreedResult, Claw, ClawLineage } from '../types/claw';
 
 const CHILD_NAMES = ['Ember', 'Nova', 'Glyph', 'Relay', 'Quartz', 'Drift', 'Halo', 'Patch', 'Mycel', 'Rook'];
 
@@ -62,6 +62,15 @@ export function breed(request: BreedRequest): BreedResult {
     mutationResult.finalSkillBadges,
     Boolean(request.demoMode),
   );
+  const breedingConversation =
+    request.breedingConversation && request.breedingConversation.length > 0
+      ? request.breedingConversation
+      : buildBreedingConversation({
+          parentA: request.parentA,
+          parentB: request.parentB,
+          prompt: request.breedPrompt ?? 'Tell me what kind of child should survive this hatch.',
+          predictedArchetype: archetype,
+        });
   const identityResult = fuseIdentity({
     parentA: request.parentA,
     parentB: request.parentB,
@@ -72,7 +81,20 @@ export function breed(request: BreedRequest): BreedResult {
     records: [...soulResult.records, ...skillResult.records, ...toolResult.records],
   });
 
-  const child = {
+  const lineage: ClawLineage = {
+    parentA: request.parentA.id,
+    parentB: request.parentB.id,
+    inheritanceMap: [
+      ...identityResult.records,
+      ...soulResult.records,
+      ...skillResult.records,
+      ...toolResult.records,
+      ...(mutationResult.record ? [mutationResult.record] : []),
+    ],
+    breedingConversation,
+  };
+
+  const child: Claw = {
     id: `claw-${crypto.randomUUID().slice(0, 8)}`,
     name: buildChildName(request, rng),
     archetype,
@@ -92,18 +114,16 @@ export function breed(request: BreedRequest): BreedResult {
       request.demoMode && isDemoShowcasePair(request.parentA.id, request.parentB.id)
         ? 'I inherited caution from Sage, velocity from Bolt, and a dangerous instinct to leap when the hidden route appears.'
         : resolvedIntro,
-    lineage: {
-      parentA: request.parentA.id,
-      parentB: request.parentB.id,
-      inheritanceMap: [
-        ...identityResult.records,
-        ...soulResult.records,
-        ...skillResult.records,
-        ...toolResult.records,
-        ...(mutationResult.record ? [mutationResult.record] : []),
-      ],
-    },
+    lineage,
   };
+
+  const doctrine = buildChildDoctrine({
+    child,
+    parentA: request.parentA,
+    parentB: request.parentB,
+    conversation: breedingConversation,
+  });
+  child.lineage = { ...lineage, doctrine };
 
   return {
     child,

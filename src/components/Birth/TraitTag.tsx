@@ -5,25 +5,19 @@ interface TraitTagProps {
 }
 
 export function TraitTag({ label, color, state = 'base' }: TraitTagProps) {
-  const stateClass = {
-    base: 'text-[#d6dfbf]',
-    inherited: 'text-[#efe3bf] shadow-candy',
-    eliminated: 'text-[#7f8e71] opacity-50',
-    mutation: 'text-[#141811] shadow-candy',
+  const styles = {
+    base: 'border-jungle-600/40 bg-jungle-900 text-bone-dim',
+    inherited: 'border-amber/30 bg-jungle-800 text-bone shadow-amber',
+    eliminated: 'border-jungle-700/30 bg-jungle-950 text-bone-muted opacity-40',
+    mutation: 'border-danger bg-danger text-bone font-bold shadow-danger',
   }[state];
 
   return (
     <div
-      className={`rounded-[0.7rem] border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] ${stateClass}`}
-      style={{
-        borderColor: state === 'mutation' ? '#8c6731' : `${color}44`,
-        background:
-          state === 'mutation'
-            ? 'linear-gradient(180deg, rgba(215,179,106,0.96), rgba(183,137,62,0.96))'
-            : `linear-gradient(180deg, rgba(22,33,26,0.96), ${color}${state === 'eliminated' ? '08' : '14'})`,
-      }}
+      className={`rounded-md border px-4 py-2 text-xs font-semibold uppercase tracking-wider ${styles}`}
+      style={state === 'base' ? { borderColor: `${color}33` } : undefined}
     >
-      {label}
+      {state === 'mutation' && '✦ '}{label}
     </div>
   );
 }

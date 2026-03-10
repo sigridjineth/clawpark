@@ -26,10 +26,6 @@ interface BirthSceneProps {
   onBackToGallery: () => void;
 }
 
-function labelForPhase(phase: BirthPhase) {
-  return phase.replace('reveal_', 'reveal ');
-}
-
 export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineage, onBreedAgain, onBackToGallery }: BirthSceneProps) {
   useEffect(() => {
     const timers: number[] = [];
@@ -47,28 +43,25 @@ export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineag
   const activeIndex = PHASE_SEQUENCE.findIndex((entry) => entry.phase === phase);
 
   return (
-    <section className="space-y-5">
-      <div className="shell-card p-4 md:p-5">
-        <div className="flex flex-wrap gap-3">
-          {PHASE_SEQUENCE.map((entry, index) => {
-            const active = entry.phase === phase;
-            const passed = activeIndex > index;
-            return (
-              <div
-                key={entry.phase}
-                className={`rounded-[0.55rem] border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.22em] transition md:px-4 md:py-3 ${
-                  active
-                    ? 'border-[#8c6731] bg-[#d7b36a] text-[#141811] shadow-candy'
-                    : passed
-                      ? 'border-[#334239] bg-[#172019] text-[#dfe8c9] shadow-glow'
-                      : 'border-[#253028] bg-[#101612] text-[#6c7a63]'
-                }`}
-              >
-                0{index + 1} · {labelForPhase(entry.phase)}
-              </div>
-            );
-          })}
-        </div>
+    <section className="space-y-4">
+      {/* Minimal phase progress bar */}
+      <div className="flex items-center gap-1">
+        {PHASE_SEQUENCE.map((entry, index) => {
+          const active = entry.phase === phase;
+          const passed = activeIndex > index;
+          return (
+            <div
+              key={entry.phase}
+              className={`h-1.5 flex-1 rounded-full transition-all ${
+                active
+                  ? 'bg-amber'
+                  : passed
+                    ? 'bg-fern/60'
+                    : 'bg-jungle-800'
+              }`}
+            />
+          );
+        })}
       </div>
 
       {phase === 'merge' && <MergePhase parents={parents} />}
@@ -80,10 +73,10 @@ export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineag
       )}
 
       {phase === 'complete' && (
-        <div className="shell-card flex flex-wrap justify-center gap-3 p-4 md:p-5">
-          <button type="button" onClick={onViewLineage} className="candy-button-secondary w-full sm:w-auto">View Lineage</button>
-          <button type="button" onClick={onBreedAgain} className="candy-button w-full sm:w-auto">Breed Again</button>
-          <button type="button" onClick={onBackToGallery} className="candy-button-secondary w-full sm:w-auto">Back to Gallery</button>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={onViewLineage} className="jp-btn-secondary">View Lineage</button>
+          <button type="button" onClick={onBreedAgain} className="jp-btn">Breed Again</button>
+          <button type="button" onClick={onBackToGallery} className="jp-btn-secondary">Gallery</button>
         </div>
       )}
     </section>

@@ -171,11 +171,20 @@ describe('ClawPark OpenClaw genome contracts', () => {
     const enterBreedLab = await screen.findByRole('button', { name: /Enter Breed Lab/i });
     await waitFor(() => expect(enterBreedLab).toBeEnabled());
 
-    fireEvent.click(await screen.findByRole('button', { name: new RegExp(parentA.name, 'i') }));
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(parentB.name, 'i') }));
+    const parentAButtons = screen.getAllByRole('button', { name: new RegExp(`^${parentA.name}$`, 'i') });
+    fireEvent.click(parentAButtons[0]);
+    const parentBButtons = screen.getAllByRole('button', { name: new RegExp(`^${parentB.name}$`, 'i') });
+    fireEvent.click(parentBButtons[0]);
     fireEvent.click(enterBreedLab);
 
     expectGenomeLabelsOnScreen();
+    expect(screen.getByText(/Operator prompt/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fusion/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/Guide the breeding process/i), {
+      target: { value: 'Tell me how this child should behave in the park.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Talk to Parents/i }));
+    expect(document.body.textContent?.toLowerCase()).toMatch(/should behave in the park/);
 
     fireEvent.click(await screen.findByRole('button', { name: /Initiate Breeding/i }));
 
@@ -192,6 +201,7 @@ describe('ClawPark OpenClaw genome contracts', () => {
 
     expect(await screen.findByText(/Lineage/i)).toBeInTheDocument();
     expectGenomeLabelsOnScreen();
+    expect(screen.getByText(/Breeding transcript/i)).toBeInTheDocument();
     expect(document.body.textContent?.toLowerCase()).toMatch(/inherit|fuse|mutat/);
   });
 });

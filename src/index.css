@@ -5,8 +5,8 @@
 @tailwind utilities;
 
 :root {
-  color: #e8ddb9;
-  background: #0b110d;
+  color: #F5F0E1;
+  background: #060E09;
   font-family: 'IBM Plex Sans', sans-serif;
 }
 
@@ -21,33 +21,25 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(circle at top, rgba(211, 168, 78, 0.12), transparent 18%),
-    radial-gradient(circle at 80% 15%, rgba(93, 133, 113, 0.12), transparent 20%),
-    linear-gradient(180deg, #0a100c 0%, #0f1712 48%, #0a100c 100%);
-  color: #e8ddb9;
+  background: #060E09;
+  color: #F5F0E1;
 }
 
-body::before,
-body::after {
+/* Subtle scan-line overlay */
+body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: -1;
-}
-
-body::before {
   background-image:
-    linear-gradient(rgba(91, 104, 83, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(91, 104, 83, 0.12) 1px, transparent 1px);
-  background-size: 22px 22px;
-  opacity: 0.35;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 90%);
-}
-
-body::after {
-  background: radial-gradient(circle at 50% 12%, rgba(184, 140, 53, 0.12), transparent 30%);
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(79, 121, 66, 0.03) 2px,
+      rgba(79, 121, 66, 0.03) 4px
+    );
 }
 
 button,
@@ -70,111 +62,70 @@ button:disabled {
 }
 
 ::selection {
-  background: rgba(214, 170, 81, 0.25);
-  color: #f4edd5;
+  background: rgba(212, 165, 55, 0.3);
+  color: #F5F0E1;
 }
 
 @layer components {
-  .shell-card {
-    @apply rounded-[1rem] border backdrop-blur;
-    background: linear-gradient(180deg, rgba(18, 26, 21, 0.96), rgba(10, 16, 12, 0.98));
-    border-color: rgba(196, 172, 111, 0.18);
-    box-shadow:
-      0 0.18rem 0 0 rgba(77, 95, 70, 0.7),
-      0 1.1rem 2.6rem rgba(0, 0, 0, 0.28);
+  /* Card with dark jungle bg */
+  .jp-card {
+    @apply rounded-lg border border-jungle-700/60 backdrop-blur;
+    background: linear-gradient(180deg, #142318 0%, #0D1A12 100%);
   }
 
-  .candy-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-[0.55rem] border px-5 py-3 text-xs font-bold uppercase tracking-[0.28em] transition duration-200 hover:-translate-y-0.5;
-    background: linear-gradient(180deg, #d7b36a, #b7893e);
-    border-color: #8c6731;
-    color: #141811;
-    box-shadow: 0 0.18rem 0 0 #8c6731;
+  /* Primary amber CTA */
+  .jp-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-amber-dark
+      bg-amber px-5 py-3 text-sm font-bold uppercase tracking-wider text-jungle-950
+      transition hover:-translate-y-0.5 hover:bg-amber-light active:translate-y-0;
   }
 
-  .candy-button:active {
-    transform: translateY(0.08rem);
-    box-shadow: 0 0.08rem 0 0 #8c6731;
+  .jp-btn:disabled {
+    @apply border-jungle-700 bg-jungle-800 text-bone-muted hover:translate-y-0;
   }
 
-  .candy-button-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-[0.55rem] border px-5 py-3 text-xs font-bold uppercase tracking-[0.28em] transition duration-200 hover:-translate-y-0.5;
-    background: rgba(22, 33, 26, 0.9);
-    border-color: rgba(100, 136, 118, 0.28);
-    color: #dbe5c9;
-    box-shadow: 0 0.18rem 0 0 rgba(100, 136, 118, 0.28);
+  /* Secondary outline button */
+  .jp-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-jungle-600
+      bg-jungle-800/80 px-5 py-3 text-sm font-bold uppercase tracking-wider text-bone-dim
+      transition hover:-translate-y-0.5 hover:border-fern/40 active:translate-y-0;
   }
 
-  .candy-button-secondary:active {
-    transform: translateY(0.08rem);
-    box-shadow: 0 0.08rem 0 0 rgba(100, 136, 118, 0.28);
+  /* Small tag/pill */
+  .jp-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-jungle-600/50
+      bg-jungle-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-bone-dim;
   }
 
-  .candy-pill {
-    @apply inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.24em];
-    background: rgba(21, 31, 24, 0.86);
-    border-color: rgba(196, 172, 111, 0.14);
-    color: #cad6ba;
+  /* Section label */
+  .jp-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.3em] text-fern;
   }
 }
 
+/* Avatar shell — simplified */
 .avatar-shell {
   position: relative;
   display: inline-grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(212, 165, 55, 0.15);
   background:
-    radial-gradient(circle at 30% 18%, rgba(255, 228, 153, 0.08), transparent 34%),
-    linear-gradient(160deg, color-mix(in srgb, var(--primary) 18%, #111913), color-mix(in srgb, var(--secondary) 24%, #162019));
+    radial-gradient(circle at 30% 20%, rgba(212, 165, 55, 0.06), transparent 40%),
+    linear-gradient(160deg, color-mix(in srgb, var(--primary) 15%, #0D1A12), color-mix(in srgb, var(--secondary) 20%, #142318));
   box-shadow:
-    inset 0 0 0 1px rgba(226, 213, 175, 0.12),
-    0 12px 24px rgba(0, 0, 0, 0.24),
-    0 0 calc(42px * var(--glow)) color-mix(in srgb, var(--secondary) 10%, transparent);
-}
-
-.avatar-shell::before,
-.avatar-shell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.avatar-shell::before {
-  background-image:
-    linear-gradient(rgba(226, 213, 175, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 213, 175, 0.06) 1px, transparent 1px);
-  background-size: 16px 16px;
-  opacity: 0.4;
-}
-
-.avatar-shell::after {
-  background: linear-gradient(170deg, rgba(245, 211, 129, 0.08), transparent 42%);
-}
-
-.avatar-pattern-stripe::before {
-  opacity: 0.1;
-  background: repeating-linear-gradient(135deg, rgba(226, 213, 175, 0.16) 0 10px, transparent 10px 20px);
-}
-
-.avatar-pattern-dot::before {
-  opacity: 0.12;
-  background-image: radial-gradient(rgba(226, 213, 175, 0.18) 1.5px, transparent 1.5px);
-  background-size: 14px 14px;
-}
-
-.avatar-pattern-wave::before {
-  opacity: 0.12;
-  background: repeating-radial-gradient(circle at 38% 32%, rgba(120, 184, 167, 0.14) 0 6px, transparent 6px 18px);
-}
-
-.avatar-pattern-gradient::before {
-  opacity: 0.12;
-  background: radial-gradient(circle at 68% 28%, rgba(215, 179, 106, 0.18), transparent 34%);
+    0 8px 20px rgba(0, 0, 0, 0.3),
+    0 0 calc(30px * var(--glow)) color-mix(in srgb, var(--secondary) 8%, transparent);
 }
 
 .avatar-shell svg {
   width: 100%;
   height: 100%;
 }
+
+.avatar-pattern-stripe { }
+.avatar-pattern-dot { }
+.avatar-pattern-wave { }
+.avatar-pattern-gradient { }
+.avatar-pattern-solid { }

@@ -13,15 +13,14 @@ export function BlendPhase({ parents, result }: BlendPhaseProps) {
   const mutationTraitId = result.mutatedTrait?.id;
 
   return (
-    <div className="relative min-h-[22rem] overflow-hidden rounded-[1rem] border border-[#334239] bg-[linear-gradient(180deg,rgba(18,27,22,0.92),rgba(11,18,15,0.96))] p-8 shadow-card">
-      <div className="absolute inset-x-12 top-8 h-24 rounded-full bg-[radial-gradient(circle,rgba(215,179,106,0.18),transparent_72%)] blur-2xl" />
+    <div className="relative min-h-[20rem] overflow-hidden rounded-lg border border-jungle-700/60 bg-jungle-900 p-8">
       <div className="grid gap-4 md:grid-cols-2">
         {parentTraits.map((trait, index) => {
           const inherited = inheritedIds.has(trait.id);
           return (
             <motion.div
               key={`${trait.id}-${index}`}
-              animate={inherited ? { scale: 1.05, opacity: 1, y: -10 } : { scale: 0.82, opacity: 0.32, y: 16 }}
+              animate={inherited ? { scale: 1.05, opacity: 1, y: -8 } : { scale: 0.85, opacity: 0.3, y: 12 }}
               transition={{ duration: inherited ? 0.6 : 0.8, ease: inherited ? 'easeOut' : 'easeIn' }}
             >
               <TraitTag label={trait.label} color={trait.color} state={inherited ? 'inherited' : 'eliminated'} />
@@ -36,7 +35,7 @@ export function BlendPhase({ parents, result }: BlendPhaseProps) {
           transition={{ duration: 0.8, delay: 0.8 }}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
-          <TraitTag label={result.mutatedTrait?.label ?? 'Mutation'} color="#d7b36a" state="mutation" />
+          <TraitTag label={result.mutatedTrait?.label ?? 'Mutation'} color="#C41E3A" state="mutation" />
         </motion.div>
       )}
     </div>

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { INITIAL_CLAWS } from '../data/claws';
 import { breed } from '../engine/breed';
+import { buildBreedingConversation } from '../engine/openclaw';
 import { predictBreed } from '../engine/predict';
-import type { BreedPrediction, BreedResult, BirthPhase, Claw, Screen } from '../types/claw';
+import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
+import { loadClawsFromStorage, saveClawsToStorage } from '../utils/clawIO';
 import { DEMO_PARENT_IDS, DEMO_SEED, resolveBreedSeed } from '../utils/demoMode';
 
 interface ClawStore {
@@ -14,6 +16,10 @@ interface ClawStore {
 
   prediction: BreedPrediction | null;
   preferredTraitId: string | null;
+  breedPrompt: string;
+  breedingConversation: ConversationTurn[];
+  setBreedPrompt: (prompt: string) => void;
+  generateParentConversation: () => void;
   setPreferredTrait: (traitId: string | null) => void;
   computePrediction: () => void;
 
@@ -37,6 +43,11 @@ interface ClawStore {
   setDemoMode: (value: boolean) => void;
   loadDemoPair: () => void;
 
+  // Marketplace & Import/Export
+  claimMarketplaceClaw: (claw: Claw) => void;
+  importClaws: (claws: Claw[]) => void;
+  removeClaw: (id: string) => void;
+
   reset: () => void;
 }
 
@@ -46,12 +57,25 @@ export function getSelectedClaws(claws: Claw[], selectedIds: string[]): Claw[] {
     .filter((claw): claw is Claw => Boolean(claw));
 }
 
+function loadInitialClaws(): Claw[] {
+  const saved = loadClawsFromStorage();
+  if (saved && saved.length > 0) {
+    // Merge: ensure all INITIAL_CLAWS are present (in case new ones were added)
+    const savedIds = new Set(saved.map((c) => c.id));
+    const missing = INITIAL_CLAWS.filter((c) => !savedIds.has(c.id));
+    return [...saved, ...missing];
+  }
+  return INITIAL_CLAWS;
+}
+
 export function createInitialStoreState() {
   return {
     claws: INITIAL_CLAWS,
     selectedIds: [] as string[],
     prediction: null as BreedPrediction | null,
     preferredTraitId: null as string | null,
+    breedPrompt: 'Tell me what kind of child should survive this hatch.',
+    breedingConversation: [] as ConversationTurn[],
     breedResult: null as BreedResult | null,
     birthPhase: 'merge' as BirthPhase,
     screen: 'gallery' as Screen,
@@ -60,8 +84,14 @@ export function createInitialStoreState() {
   };
 }
 
+/** Helper to persist claws after mutations */
+function persistClaws(claws: Claw[]) {
+  saveClawsToStorage(claws);
+}
+
 export const useClawStore = create<ClawStore>((set, get) => ({
   ...createInitialStoreState(),
+  claws: loadInitialClaws(),
 
   selectClaw: (id) => {
     const selected = [...get().selectedIds];
@@ -83,6 +113,32 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   },
 
   clearSelection: () => set({ selectedIds: [], prediction: null, preferredTraitId: null }),
+
+  setBreedPrompt: (breedPrompt) => set({ breedPrompt }),
+
+  generateParentConversation: () => {
+    const state = get();
+    const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
+    if (selectedClaws.length !== 2) {
+      return;
+    }
+
+    const prediction =
+      state.prediction ??
+      predictBreed(
+        selectedClaws[0],
+        selectedClaws[1],
+        state.preferredTraitId ?? undefined,
+        state.demoMode,
+      );
+    const conversation = buildBreedingConversation({
+      parentA: selectedClaws[0],
+      parentB: selectedClaws[1],
+      prompt: state.breedPrompt,
+      predictedArchetype: prediction.predictedArchetype,
+    });
+    set({ breedingConversation: conversation, prediction });
+  },
 
   setPreferredTrait: (traitId) => {
     set({ preferredTraitId: traitId });
@@ -123,6 +179,8 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       preferredTraitId: state.preferredTraitId ?? undefined,
       demoMode: state.demoMode,
       breedCount: state.breedCount,
+      breedPrompt: state.breedPrompt,
+      breedingConversation: state.breedingConversation,
       seed: state.demoMode
         ? DEMO_SEED + state.breedCount
         : resolveBreedSeed(
@@ -154,10 +212,14 @@ export const useClawStore = create<ClawStore>((set, get) => ({
 
     set((state) => {
       const exists = state.claws.some((claw) => claw.id === result.child.id);
+      const nextClaws = exists ? state.claws : [result.child, ...state.claws];
+      persistClaws(nextClaws);
       return {
-        claws: exists ? state.claws : [result.child, ...state.claws],
+        claws: nextClaws,
         selectedIds: [],
         preferredTraitId: null,
+        breedPrompt: 'Tell me what kind of child should survive this hatch.',
+        breedingConversation: [],
         prediction: null,
         screen: 'gallery' as Screen,
         birthPhase: 'merge' as BirthPhase,
@@ -175,6 +237,8 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       birthPhase: 'merge',
       screen: 'gallery',
       preferredTraitId: null,
+      breedPrompt: 'Tell me what kind of child should survive this hatch.',
+      breedingConversation: [],
       prediction: null,
     });
   },
@@ -197,5 +261,41 @@ export const useClawStore = create<ClawStore>((set, get) => ({
     get().computePrediction();
   },
 
-  reset: () => set(createInitialStoreState()),
+  // Marketplace
+  claimMarketplaceClaw: (claw) => {
+    set((state) => {
+      const exists = state.claws.some((c) => c.id === claw.id);
+      if (exists) return state;
+      const nextClaws = [claw, ...state.claws];
+      persistClaws(nextClaws);
+      return { claws: nextClaws };
+    });
+  },
+
+  // Import
+  importClaws: (newClaws) => {
+    set((state) => {
+      const existingIds = new Set(state.claws.map((c) => c.id));
+      const fresh = newClaws.filter((c) => !existingIds.has(c.id));
+      if (fresh.length === 0) return state;
+      const nextClaws = [...fresh, ...state.claws];
+      persistClaws(nextClaws);
+      return { claws: nextClaws };
+    });
+  },
+
+  // Remove
+  removeClaw: (id) => {
+    set((state) => {
+      const nextClaws = state.claws.filter((c) => c.id !== id);
+      persistClaws(nextClaws);
+      return { claws: nextClaws, selectedIds: state.selectedIds.filter((sid) => sid !== id) };
+    });
+  },
+
+  reset: () => {
+    const initial = createInitialStoreState();
+    persistClaws(initial.claws);
+    set(initial);
+  },
 }));

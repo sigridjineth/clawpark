@@ -1,76 +1,60 @@
 # ClawPark
 
-Interactive collectible-claw breeding demo with a CryptoKitties-style, catalogue-first product surface.
+ClawPark is an OpenClaw-inspired agent breeding lab.
 
-## Experience goals
+The app lets you:
+- browse parent Claws
+- inspect their `Identity`, `Soul`, `Skills`, and `Tools`
+- talk to each parent before breeding
+- generate a child with a preserved lineage, breeding transcript, and doctrine artifact
+- export/import specimens through the marketplace flow
 
-- Gallery is the default hero experience.
-- Cards feel playful, rounded, pastel, and collectible.
-- Copy stays minimal; actions stay obvious.
-- Existing breeding, demo mode, and recursive lineage logic remain intact.
+## Current product direction
 
-## Stack
+ClawPark is intentionally framed as a **Jurassic Park-style genome lab**:
+- darker containment-lab visual system
+- low-text, scan-friendly UI
+- lineage as a specimen genealogy map
+- parent-to-parent “talk to breed” interaction
 
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS
-- Framer Motion
-- Zustand
+## Core OpenClaw genome dimensions
 
-## Run locally
+Each Claw is modeled across four dimensions:
+- **Identity** — creature, role, directive, vibe, emoji
+- **Soul** — core behavioral traits and principles
+- **Skills** — reusable capabilities
+- **Tools** — preferred operational loadout
 
-```bash
-npm install
-npm run dev
-```
+## Main flow
 
-Open the Vite URL shown in the terminal.
+1. Browse the catalogue
+2. Select two parent Claws
+3. Enter Breed Lab
+4. Ask the parents a free-form operator prompt
+5. Generate parent dialogue with **Talk to Parents**
+6. Breed the child
+7. Review the child reveal, doctrine, and transcript
+8. Inspect recursive lineage
+9. Save/export the new specimen
+
+## Features implemented
+
+- OpenClaw-style genome model (`Identity`, `Soul`, `Skills`, `Tools`)
+- deterministic demo mode
+- recursive lineage
+- doctrine artifact for each child
+- breeding transcript stored in lineage
+- marketplace/import/export scaffolding
 
 ## Scripts
 
 ```bash
+npm install
 npm run dev
 npm run test
 npm run lint
 npm run build
 ```
-
-## Demo mode
-
-Use either:
-
-- `http://localhost:5173/?demo=true`
-- `Ctrl+Shift+D` / `Cmd+Shift+D`
-
-Demo mode:
-
-- auto-selects the showcase pair
-- uses deterministic seeded breeding
-- guarantees the presentation-friendly mutation path
-
-## Product flow
-
-1. Browse the gallery catalogue
-2. Select two Claws
-3. Tune trait bias in Breed Lab
-4. Watch the birth sequence
-5. Inspect recursive lineage
-
-## UI overhaul references
-
-- PRD: `.omx/plans/prd-clawpark-cryptokitties-ui.md`
-- Test spec: `.omx/plans/test-spec-clawpark-cryptokitties-ui.md`
-- Review notes: `docs/cryptokitties-ui-review.md`
-
-## Manual QA focus
-
-- Gallery reads as a collectible catalogue before anything else.
-- Cards stay highly scannable with very little copy.
-- Breed Lab keeps compact controls and clear prediction feedback.
-- Birth stays high-impact without obscuring the child reveal.
-- Lineage remains readable after UI restyling.
-- Demo mode still drives the showcase gallery → breed → gallery loop.
 
 ## Verification snapshot
 

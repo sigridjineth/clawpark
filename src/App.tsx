@@ -1,19 +1,14 @@
 import { useEffect, useMemo } from 'react';
-import { ShieldAlert } from 'lucide-react';
 import { BirthScene } from './components/Birth/BirthScene';
 import { BreedLab } from './components/BreedLab/BreedLab';
 import { Gallery } from './components/Gallery/Gallery';
 import { LineageGraph } from './components/Lineage/LineageGraph';
+import { Marketplace } from './components/Marketplace/Marketplace';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
 import type { Claw } from './types/claw';
 import { attachDemoShortcut, isDemoModeFromSearch, updateDemoModeQuery } from './utils/demoMode';
 
-const SCREEN_FLOW = [
-  { id: 'gallery', label: 'Catalogue' },
-  { id: 'breedLab', label: 'Lab' },
-  { id: 'birth', label: 'Birth' },
-  { id: 'lineage', label: 'Lineage' },
-] as const;
+const SCREENS = ['gallery', 'breedLab', 'birth', 'lineage', 'marketplace'] as const;
 
 function App() {
   const {
@@ -24,6 +19,10 @@ function App() {
     setScreen,
     prediction,
     preferredTraitId,
+    breedPrompt,
+    breedingConversation,
+    setBreedPrompt,
+    generateParentConversation,
     setPreferredTrait,
     breedSelected,
     breedResult,
@@ -34,6 +33,8 @@ function App() {
     toggleDemoMode,
     setDemoMode,
     loadDemoPair,
+    claimMarketplaceClaw,
+    importClaws,
   } = useClawStore();
 
   const selectedClaws = useMemo(() => getSelectedClaws(claws, selectedIds), [claws, selectedIds]);
@@ -69,70 +70,58 @@ function App() {
     return null;
   }, [breedResult, claws, selectedClaws]);
 
-  const currentStepIndex = SCREEN_FLOW.findIndex((entry) => entry.id === screen);
+  const currentIndex = SCREENS.indexOf(screen);
 
   return (
-    <div className="min-h-screen bg-cream text-ink">
-      <div className="fixed inset-x-0 top-0 -z-10 h-[18rem] bg-confetti opacity-90" />
-      <div className="mx-auto flex min-h-screen w-full max-w-[88rem] flex-col gap-5 px-3 py-4 md:px-8 md:py-8 lg:px-10">
-        <header className="shell-card overflow-hidden px-4 py-4 md:px-7 md:py-5">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1rem] border border-[#c7b587]/20 bg-[linear-gradient(180deg,rgba(22,32,25,0.98),rgba(12,18,14,0.98))] shadow-float md:h-16 md:w-16 md:rounded-[1.15rem]">
-                <ShieldAlert className="h-7 w-7 text-butter md:h-8 md:w-8" />
-              </div>
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#7d916d]">Containment archive</div>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <h1 className="font-display text-3xl leading-none text-ink md:text-5xl">ClawPark</h1>
-                  <span className="rounded-full border border-[#c7b587]/14 bg-[#172019] px-3 py-1 text-xs font-bold uppercase tracking-[0.24em] text-[#9eb088]">
-                    {claws.length} specimens
-                  </span>
-                </div>
-              </div>
+    <div className="min-h-screen bg-jungle-950 text-bone">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 md:px-8 md:py-6">
+        {/* Minimal header */}
+        <header className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => setScreen('gallery')}
+            className="flex items-center gap-3"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber/20 bg-jungle-800">
+              <span className="text-lg">🧬</span>
             </div>
+            <h1 className="font-display text-2xl leading-none text-bone md:text-3xl">ClawPark</h1>
+          </button>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="candy-pill">Containment mode</div>
-              <button
-                type="button"
-                onClick={toggleDemoMode}
-                className={`rounded-[0.55rem] border px-4 py-3 text-xs font-bold uppercase tracking-[0.28em] transition ${
-                  demoMode
-                    ? 'border-[#8c6731] bg-[#d7b36a] text-[#141811] shadow-[0_0.18rem_0_0_#8c6731]'
-                    : 'border-[#334239] bg-[#172019] text-[#dfe8c9] hover:bg-[#1a241f]'
-                }`}
-              >
-                Demo {demoMode ? 'On' : 'Off'}
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {SCREEN_FLOW.map((entry, index) => {
-              const active = entry.id === screen;
-              const passed = index < currentStepIndex;
-              const stepLabel = active && entry.id === 'lineage' ? 'Branch' : entry.label;
-
-              return (
+          <div className="flex items-center gap-2">
+            {/* Step dots */}
+            <div className="hidden items-center gap-1 sm:flex">
+              {SCREENS.filter((s) => s !== 'marketplace').map((s, i) => (
                 <div
-                  key={entry.id}
-                  className={`rounded-[0.9rem] border px-3 py-3 transition md:px-4 md:py-4 ${
-                    active
-                      ? 'border-[#8c6731] bg-[linear-gradient(180deg,rgba(45,58,47,0.96),rgba(20,28,22,0.96))] shadow-candy'
-                      : passed
-                        ? 'border-[#334239] bg-[#172019] shadow-glow'
-                        : 'border-[#253028] bg-[#101612]'
+                  key={s}
+                  className={`h-2 rounded-full transition-all ${
+                    s === screen
+                      ? 'w-6 bg-amber'
+                      : i < currentIndex && screen !== 'marketplace'
+                        ? 'w-2 bg-fern'
+                        : 'w-2 bg-jungle-700'
                   }`}
-                >
-                  <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#7f8e71]">0{index + 1}</div>
-                  <div className="mt-2 font-display text-xl leading-none text-ink md:text-2xl">{stepLabel}</div>
-                </div>
-              );
-            })}
+                />
+              ))}
+            </div>
+
+            <span className="jp-pill ml-2">{claws.length} specimens</span>
+
+            <button
+              type="button"
+              onClick={toggleDemoMode}
+              className={`rounded-md border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
+                demoMode
+                  ? 'border-amber-dark bg-amber text-jungle-950'
+                  : 'border-jungle-600 bg-jungle-800 text-bone-dim hover:border-fern/40'
+              }`}
+            >
+              Demo {demoMode ? 'On' : 'Off'}
+            </button>
           </div>
         </header>
 
+        {/* Content */}
         <main className="flex-1">
           {screen === 'gallery' && (
             <Gallery
@@ -140,7 +129,17 @@ function App() {
               selectedIds={selectedIds}
               onSelect={selectClaw}
               onContinue={() => setScreen('breedLab')}
+              onMarketplace={() => setScreen('marketplace')}
               demoMode={demoMode}
+            />
+          )}
+
+          {screen === 'marketplace' && (
+            <Marketplace
+              ownedClaws={claws}
+              onClaim={claimMarketplaceClaw}
+              onImport={importClaws}
+              onBack={() => setScreen('gallery')}
             />
           )}
 
@@ -148,6 +147,10 @@ function App() {
             <BreedLab
               parents={parentPair}
               preferredTraitId={preferredTraitId}
+              breedPrompt={breedPrompt}
+              breedingConversation={breedingConversation}
+              onBreedPromptChange={setBreedPrompt}
+              onTalkToParents={generateParentConversation}
               onPreferredTrait={setPreferredTrait}
               onBack={() => setScreen('gallery')}
               onBreed={breedSelected}
@@ -168,17 +171,14 @@ function App() {
           )}
 
           {screen === 'lineage' && parentPair && breedResult && (
-            <section className="space-y-5">
-              <div className="shell-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#8aa07b]">Genome ancestry</div>
-                  <div className="mt-2 font-display text-3xl leading-none text-ink">See every branch from this hatch</div>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <button type="button" onClick={() => setScreen('birth')} className="candy-button-secondary">
-                    Back to birth
+            <section className="space-y-4">
+              <div className="jp-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <h2 className="font-display text-3xl text-bone">Lineage</h2>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setScreen('birth')} className="jp-btn-secondary">
+                    Back
                   </button>
-                  <button type="button" onClick={addChildToGallery} className="candy-button">
+                  <button type="button" onClick={addChildToGallery} className="jp-btn">
                     Save child to gallery
                   </button>
                 </div>

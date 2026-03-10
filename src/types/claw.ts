@@ -74,10 +74,25 @@ export interface InheritanceRecord {
   detail?: string;
 }
 
+export interface ConversationTurn {
+  id: string;
+  speaker: 'user' | 'parentA' | 'parentB' | 'fusion';
+  title: string;
+  content: string;
+}
+
+export interface ChildDoctrine {
+  title: string;
+  creed: string;
+  summary: string;
+}
+
 export interface ClawLineage {
   parentA: string;
   parentB: string;
   inheritanceMap: InheritanceRecord[];
+  breedingConversation?: ConversationTurn[];
+  doctrine?: ChildDoctrine;
 }
 
 export interface Claw {
@@ -108,6 +123,8 @@ export interface BreedRequest {
   seed?: number;
   demoMode?: boolean;
   breedCount?: number;
+  breedPrompt?: string;
+  breedingConversation?: ConversationTurn[];
 }
 
 export interface BreedResult {
@@ -151,7 +168,7 @@ export type BirthPhase =
   | 'reveal_intro'
   | 'complete';
 
-export type Screen = 'gallery' | 'breedLab' | 'birth' | 'lineage';
+export type Screen = 'gallery' | 'breedLab' | 'birth' | 'lineage' | 'marketplace';
 
 export interface ArchetypeEntry {
   traitComboKey: string;

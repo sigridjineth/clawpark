@@ -9,6 +9,11 @@ function renderApp() {
   render(createElement(App));
 }
 
+function clickClawCard(name: string) {
+  const buttons = screen.getAllByRole('button', { name: new RegExp(`^${name}$`, 'i') });
+  fireEvent.click(buttons[0]);
+}
+
 describe('ClawPark catalogue-first UI contracts', () => {
   beforeEach(() => {
     useClawStore.setState(createInitialStoreState());
@@ -24,17 +29,14 @@ describe('ClawPark catalogue-first UI contracts', () => {
   it('opens on the catalogue shell and only unlocks breeding after two picks', async () => {
     renderApp();
 
-    expect(await screen.findByText(/Claw catalogue/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Catalogue').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Lab')).toBeInTheDocument();
-    expect(screen.getByText('Birth')).toBeInTheDocument();
-    expect(screen.getByText('Lineage')).toBeInTheDocument();
+    expect(await screen.findByText(/ClawPark/i)).toBeInTheDocument();
+    expect(screen.getByText(/specimens/i)).toBeInTheDocument();
 
     const enterBreedLab = screen.getByRole('button', { name: /Enter Breed Lab/i });
     expect(enterBreedLab).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: /Sage/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Bolt/i }));
+    clickClawCard('Sage');
+    clickClawCard('Bolt');
 
     await waitFor(() => {
       expect(enterBreedLab).toBeEnabled();
@@ -45,14 +47,15 @@ describe('ClawPark catalogue-first UI contracts', () => {
   it('keeps the breed lab prediction and trait-bias controls in the main browse flow', async () => {
     renderApp();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Sage/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Bolt/i }));
+    await screen.findByText(/ClawPark/i);
+    clickClawCard('Sage');
+    clickClawCard('Bolt');
     fireEvent.click(screen.getByRole('button', { name: /Enter Breed Lab/i }));
 
     expect(await screen.findByText(/Trait bias/i)).toBeInTheDocument();
     expect(screen.getByText(/Expected inheritance/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mutation chance/i)).toBeInTheDocument();
-    expect(screen.getByText(/Predicted archetype/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mutation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Archetype/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Caution/i }));
 
@@ -66,8 +69,9 @@ describe('ClawPark catalogue-first UI contracts', () => {
 
     renderApp();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Sage/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Bolt/i }));
+    await screen.findByText(/ClawPark/i);
+    clickClawCard('Sage');
+    clickClawCard('Bolt');
     fireEvent.click(screen.getByRole('button', { name: /Enter Breed Lab/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Initiate Breeding/i }));
 
@@ -82,7 +86,7 @@ describe('ClawPark catalogue-first UI contracts', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /View Lineage/i }));
 
-    expect(await screen.findByText(/Lineage map/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Lineage/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save child to gallery/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Save child to gallery/i }));

@@ -2,6 +2,8 @@ import { TOOL_BADGE_BY_ID } from '../data/toolBadges';
 import type {
   Claw,
   ClawIdentity,
+  ChildDoctrine,
+  ConversationTurn,
   InheritanceRecord,
   SkillBadge,
   SoulTrait,
@@ -228,4 +230,193 @@ export function buildDimensionForecast({
 export function summarizeIdentity(claw: Claw) {
   const identity = getClawIdentity(claw);
   return `${identity.emoji} ${identity.creature} · ${identity.vibe}`;
+}
+
+function listToSentence(labels: string[]) {
+  if (labels.length === 0) {
+    return '';
+  }
+
+  if (labels.length === 1) {
+    return labels[0];
+  }
+
+  if (labels.length === 2) {
+    return `${labels[0]} and ${labels[1]}`;
+  }
+
+  return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
+}
+
+export function summarizeSoul(claw: Claw) {
+  const labels = claw.soul.traits.map((trait) => trait.label);
+  const leadDescription = claw.soul.traits[0]?.description ?? 'Keeps the hatchling steady in the enclosure.';
+  return `${listToSentence(labels)} define how this claw thinks. ${leadDescription}`;
+}
+
+export function summarizeSkills(claw: Claw) {
+  const labels = sortSkills(claw.skills.badges).map((skill) => skill.label);
+  return `It works best through ${listToSentence(labels)}.`;
+}
+
+export function summarizeTools(claw: Claw) {
+  const loadout = getClawTools(claw).loadout.map((tool) => tool.label);
+  return `Its field kit usually resolves into ${listToSentence(loadout)}.`;
+}
+
+export function summarizeClawDossier(claw: Claw) {
+  const identity = getClawIdentity(claw);
+  return `${identity.emoji} ${identity.creature} with a ${identity.vibe.toLowerCase()} profile. ${identity.directive}`;
+}
+
+export interface ClawTalkProfile {
+  identity: string;
+  soul: string;
+  skills: string;
+  tools: string;
+}
+
+export function buildClawTalkProfile(claw: Claw): ClawTalkProfile {
+  const identity = getClawIdentity(claw);
+  const tools = getClawTools(claw).loadout;
+  const leadSoul = claw.soul.traits[0];
+  const secondarySoul = claw.soul.traits[1];
+  const topSkills = sortSkills(claw.skills.badges)
+    .slice(0, 2)
+    .map((skill) => skill.label.toLowerCase());
+
+  return {
+    identity: `I'm ${identity.emoji} ${identity.creature}, built for ${identity.role.toLowerCase()} work inside the park.`,
+    soul: `I stay ${leadSoul.label.toLowerCase()} and ${secondarySoul?.label.toLowerCase() ?? 'stable'} — ${leadSoul.description.toLowerCase()}.`,
+    skills: `When a problem appears, I lean on ${listToSentence(topSkills)} first.`,
+    tools: `My first reach is usually ${listToSentence(tools.map((tool) => tool.label.toLowerCase()))}.`,
+  };
+}
+
+export function buildFusionHint({
+  parentA,
+  parentB,
+  predictedArchetype,
+}: {
+  parentA: Claw;
+  parentB: Claw;
+  predictedArchetype: string;
+}) {
+  const identityA = getClawIdentity(parentA);
+  const identityB = getClawIdentity(parentB);
+  const toolA = getClawTools(parentA).loadout[0]?.label ?? 'the first kit';
+  const toolB = getClawTools(parentB).loadout[0]?.label ?? 'the second kit';
+
+  return `${identityA.creature} brings ${toolA.toLowerCase()}, ${identityB.creature} brings ${toolB.toLowerCase()}, and the hatch points toward ${predictedArchetype.toLowerCase()}.`;
+}
+
+function promptIntent(prompt: string) {
+  const lowered = prompt.toLowerCase();
+  if (/(skill|solve|build|code|debug|ship|work)/.test(lowered)) return 'skills';
+  if (/(tool|stack|reach|use|kit|environment)/.test(lowered)) return 'tools';
+  if (/(soul|rule|belief|principle|boundary|value)/.test(lowered)) return 'soul';
+  return 'identity';
+}
+
+function summarizeForIntent(claw: Claw, intent: 'identity' | 'soul' | 'skills' | 'tools') {
+  switch (intent) {
+    case 'soul':
+      return summarizeSoul(claw);
+    case 'skills':
+      return summarizeSkills(claw);
+    case 'tools':
+      return summarizeTools(claw);
+    case 'identity':
+    default:
+      return summarizeClawDossier(claw);
+  }
+}
+
+export function buildBreedingConversation({
+  parentA,
+  parentB,
+  prompt,
+  predictedArchetype,
+}: {
+  parentA: Claw;
+  parentB: Claw;
+  prompt: string;
+  predictedArchetype: string;
+}): ConversationTurn[] {
+  const intent = promptIntent(prompt);
+  const identityA = getClawIdentity(parentA);
+  const identityB = getClawIdentity(parentB);
+
+  const aReply = summarizeForIntent(parentA, intent);
+  const bReply = summarizeForIntent(parentB, intent);
+  const fusionHint = buildFusionHint({ parentA, parentB, predictedArchetype });
+
+  return [
+    {
+      id: `turn-user-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'user',
+      title: 'Operator asks',
+      content: prompt,
+    },
+    {
+      id: `turn-a-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'parentA',
+      title: `${parentA.name} speaks`,
+      content: aReply,
+    },
+    {
+      id: `turn-b-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'parentB',
+      title: `${parentB.name} speaks`,
+      content: bReply,
+    },
+    {
+      id: `turn-a2-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'parentA',
+      title: `${parentA.name} challenges`,
+      content: `${identityA.creature} pushes for ${intent} discipline before the hatch proceeds.`,
+    },
+    {
+      id: `turn-b2-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'parentB',
+      title: `${parentB.name} counters`,
+      content: `${identityB.creature} argues that the child should stay adaptable enough to survive outside the fence.`,
+    },
+    {
+      id: `turn-fusion-${crypto.randomUUID().slice(0, 8)}`,
+      speaker: 'fusion',
+      title: 'Fusion verdict',
+      content: fusionHint,
+    },
+  ];
+}
+
+export function buildChildDoctrine({
+  child,
+  parentA,
+  parentB,
+  conversation,
+}: {
+  child: Claw;
+  parentA: Claw;
+  parentB: Claw;
+  conversation: ConversationTurn[];
+}): ChildDoctrine {
+  const identity = getClawIdentity(child);
+  let lastFusion = '';
+  for (let index = conversation.length - 1; index >= 0; index -= 1) {
+    const turn = conversation[index];
+    if (turn.speaker === 'fusion') {
+      lastFusion = turn.content;
+      break;
+    }
+  }
+  const soulLine = summarizeSoul(child);
+  const skillLine = summarizeSkills(child);
+
+  return {
+    title: `${child.name} Doctrine`,
+    creed: `${identity.creature} exists to ${identity.directive.toLowerCase()}`,
+    summary: `${parentA.name} and ${parentB.name} argued their way into a ${identity.vibe.toLowerCase()} child. ${soulLine} ${skillLine} ${lastFusion}`.trim(),
+  };
 }

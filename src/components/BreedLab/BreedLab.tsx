@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
+import { buildFusionHint } from '../../engine/openclaw';
 import type { Claw } from '../../types/claw';
 import { BreedButton } from './BreedButton';
 import { ParentSlot } from './ParentSlot';
@@ -7,86 +8,122 @@ import { PredictionPanel } from './PredictionPanel';
 interface BreedLabProps {
   parents: [Claw, Claw];
   preferredTraitId: string | null;
+  breedPrompt: string;
+  breedingConversation: import('../../types/claw').ConversationTurn[];
+  onBreedPromptChange: (prompt: string) => void;
+  onTalkToParents: () => void;
   onPreferredTrait: (traitId: string | null) => void;
   onBack: () => void;
   onBreed: () => void;
   prediction: NonNullable<import('../../types/claw').BreedPrediction>;
 }
 
-export function BreedLab({ parents, preferredTraitId, onPreferredTrait, onBack, onBreed, prediction }: BreedLabProps) {
+export function BreedLab({
+  parents,
+  preferredTraitId,
+  breedPrompt,
+  breedingConversation,
+  onBreedPromptChange,
+  onTalkToParents,
+  onPreferredTrait,
+  onBack,
+  onBreed,
+  prediction,
+}: BreedLabProps) {
   const traitPool = Array.from(
     new Map([...parents[0].soul.traits, ...parents[1].soul.traits].map((trait) => [trait.id, trait])).values(),
   );
-  const dimensionCards = [
-    { label: 'Identity', detail: 'Role and directive fuse in containment.' },
-    { label: 'Soul', detail: 'Primary lane for pre-hatch steering.' },
-    { label: 'Skills', detail: 'Operational routines merge and survive.' },
-    { label: 'Tools', detail: 'Field kit resolves from the final genome.' },
-  ];
 
   return (
-    <section className="space-y-6">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-[#8aa07b] transition hover:text-ink">
+    <section className="space-y-4">
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-bone-muted transition hover:text-bone">
         <ArrowLeft className="h-4 w-4" />
-        Back
+        Gallery
       </button>
 
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="grid gap-4 lg:grid-cols-2">
+      {/* Parents + Prediction */}
+      <div className="grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-3 lg:grid-cols-2">
           <ParentSlot claw={parents[0]} label="Parent A" />
           <ParentSlot claw={parents[1]} label="Parent B" />
         </div>
         <PredictionPanel prediction={prediction} />
       </div>
 
-      <div className="rounded-[1rem] border border-[#334239] bg-[linear-gradient(180deg,rgba(18,27,22,0.92),rgba(11,18,15,0.96))] p-4 shadow-card md:p-6">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {dimensionCards.map((dimension) => (
-            <div key={dimension.label} className="rounded-[0.9rem] border border-[#3b4332] bg-[#171d16] px-4 py-3">
-              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8aa07b]">{dimension.label}</div>
-              <div className="mt-2 text-sm leading-6 text-[#d6dfbf]">{dimension.detail}</div>
-            </div>
-          ))}
+      {/* Fusion hint */}
+      <div className="jp-card p-4">
+        <div className="jp-label">Fusion forecast</div>
+        <p className="mt-2 text-sm leading-relaxed text-bone-dim">
+          {buildFusionHint({ parentA: parents[0], parentB: parents[1], predictedArchetype: prediction.predictedArchetype })}
+        </p>
+      </div>
+
+      {/* Operator prompt */}
+      <div className="jp-card p-4">
+        <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-fern">Talk to the parents</div>
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+          <div>
+            <div className="jp-label">Operator prompt</div>
+            <textarea
+              value={breedPrompt}
+              onChange={(event) => onBreedPromptChange(event.target.value)}
+              rows={2}
+              className="mt-2 w-full resize-y rounded-md border border-jungle-700/60 bg-jungle-950 px-3 py-2 text-sm text-bone outline-none placeholder:text-bone-muted focus:border-fern/40"
+              placeholder="Guide the breeding process..."
+            />
+          </div>
+          <div className="flex items-end">
+            <button type="button" onClick={onTalkToParents} className="jp-btn-secondary h-fit">
+              Talk to Parents
+            </button>
+          </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.35em] text-[#8aa07b]">Trait bias</div>
-            <div className="mt-2 text-sm leading-6 text-[#b8c49e]">Favor one SOUL strand before the rest of the OpenClaw genome fuses.</div>
+        {breedingConversation.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {breedingConversation.map((turn) => (
+              <div key={turn.id} className="rounded-md border border-jungle-700/40 bg-jungle-950 px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-fern">{turn.title}</div>
+                <div className="mt-1 text-sm text-bone-dim">{turn.content}</div>
+              </div>
+            ))}
           </div>
+        )}
+      </div>
+
+      {/* Trait bias — compact */}
+      <div className="jp-card p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="jp-label">Trait bias</span>
           <button
             type="button"
             onClick={() => onPreferredTrait(null)}
-            className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.28em] transition ${
+            className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition ${
               preferredTraitId === null
-                ? 'border-[#8c6731] bg-[#d7b36a] text-[#141811]'
-                : 'border-[#334239] bg-[#172019] text-[#dfe8c9] hover:border-[#536556]'
+                ? 'border-amber-dark bg-amber text-jungle-950'
+                : 'border-jungle-600 bg-jungle-900 text-bone-dim hover:border-fern/40'
             }`}
           >
-            Balanced genome
+            Balanced
           </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-3">
           {traitPool.map((trait) => (
             <button
               type="button"
               key={trait.id}
               onClick={() => onPreferredTrait(trait.id)}
-              className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.28em] transition ${
+              className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition ${
                 preferredTraitId === trait.id
-                  ? 'bg-[#d7b36a] text-[#141811]'
-                  : 'bg-[#172019] text-[#dfe8c9] hover:border-[#536556]'
+                  ? 'border-amber-dark bg-amber text-jungle-950'
+                  : 'border-jungle-600 bg-jungle-900 text-bone-dim hover:border-fern/40'
               }`}
-              style={{ borderColor: `${trait.color}55` }}
             >
-              SOUL · {trait.label}
+              {trait.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center pt-2">
         <BreedButton onClick={onBreed} />
       </div>
     </section>

@@ -1,27 +1,42 @@
 # PRD — ClawPark OpenClaw Genome Pass
 
 ## Goal
-Turn ClawPark from a fictional trait breeder into an OpenClaw-inspired agent genome lab. Breeding should operate on actual OpenClaw-style dimensions: IDENTITY, SOUL, SKILLS, and TOOLS. The UI should present this like a Jurassic Park-style species lab while staying concise and demoable.
+Turn ClawPark into an OpenClaw-inspired agent genome lab where users can breed agents across real OpenClaw-style dimensions and understand the result through dialogue, lineage, and doctrine.
 
-## Scope
-- Replace or augment fictional trait framing with OpenClaw dimensions:
-  - `IDENTITY.md`
-  - `SOUL.md`
-  - `TOOLS.md`
-  - `skills/*/SKILL.md`
-- Show inheritance and transformation across those dimensions during breeding
-- Preserve gallery, lab, birth, lineage flow
-- Preserve recursive lineage and demo mode
-- Make changes legible: what is inherited, fused, dominant, or mutated
+## Product concept
+Each parent Claw represents an agent genome with four visible dimensions:
+- `IDENTITY.md`
+- `SOUL.md`
+- `skills/*/SKILL.md`
+- `TOOLS.md`
 
-## Acceptance Criteria
-1. Each Claw visibly includes OpenClaw-style sections: identity, soul, skills, tools.
-2. Breed Lab and Birth clearly show what each dimension is and how it changes.
-3. Lineage remains recursive and displays dimension-level ancestry context.
-4. Demo flow remains usable and visually strong.
-5. Tests/lint/build/diagnostics all pass.
+Breeding should not feel like random trait averaging. It should feel like two agents are brought into the same containment chamber, asked what kind of child should survive, and then fused into a new specimen.
 
-## Out of Scope
-- Live parsing of external markdown from a real OpenClaw workspace
-- Backend persistence
-- Marketplace/multi-user
+## In scope
+- OpenClaw-style genome model in the app
+- Free-form operator prompt in Breed Lab
+- Parent dialogue generation from that prompt
+- Child doctrine artifact
+- Breeding transcript persisted in lineage
+- Recursive lineage display
+- Deterministic demo mode
+- Import/export and marketplace scaffolding
+- Jurassic Park-style low-text lab UI
+
+## Acceptance criteria
+1. Every Claw visibly includes `Identity`, `Soul`, `Skills`, and `Tools`.
+2. Users can enter a custom operator prompt before breeding.
+3. Parents generate a visible dialogue from that prompt.
+4. The resulting child stores:
+   - inheritance map
+   - breeding transcript
+   - doctrine artifact
+5. Reveal and lineage views surface the transcript and doctrine.
+6. Recursive lineage still works for bred descendants.
+7. Test, lint, build, and diagnostics all pass.
+
+## Out of scope
+- Live parsing of an external OpenClaw workspace
+- Real backend persistence or auth
+- Real-time RL training loops
+- Secure webhook/backend delivery infrastructure
