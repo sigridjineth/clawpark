@@ -1,17 +1,20 @@
-import { createHash } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
-import { basename } from 'node:path';
 import { SKILL_BADGES } from '../src/data/skillBadges.ts';
 import { SOUL_TRAITS } from '../src/data/soulTraits.ts';
 import { TOOL_BADGES } from '../src/data/toolBadges.ts';
 import type { Claw, ClawIdentity, ClawVisual, SkillBadge, SoulTrait } from '../src/types/claw.ts';
-import type { ClawBundleManifest } from '../src/types/marketplace.ts';
+import type { ClawBundleManifest, PublishedSkill, SkillBundleManifest } from '../src/types/marketplace.ts';
 
 const execFile = promisify(execFileCallback);
 const PATTERNS: ClawVisual['pattern'][] = ['solid', 'gradient', 'stripe', 'dot', 'wave'];
-const ALLOWLIST = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md'];
-const DENYLIST_PATTERNS = [/^AGENTS\.md$/i, /^USER\.md$/i, /^MEMORY\.md$/i, /^memory\//i, /^\.env/i, /^logs\//i, /\.sqlite$/i, /^\.git\//i];
+const CLAW_ALLOWLIST = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md'];
+const SKILL_ALLOWLIST = [/^SKILL\.md$/i, /^README\.md$/i, /^scripts\//i, /^assets\//i, /^references\//i];
+const DENYLIST_PATTERNS = [/^AGENTS\.md$/i, /^USER\.md$/i, /^MEMORY\.md$/i, /^memory\//i, /^\.env/i, /^logs\//i, /\.sqlite$/i, /^\.git\//i, /(^|\/)node_modules\//i];
 
 const SOUL_KEYWORDS: Record<string, string[]> = {
   'trait-caution': ['caution', 'careful', 'safe', 'verify', 'boundary', 'guardrail', 'risk'],
@@ -51,17 +54,6 @@ const TOOL_IDS_BY_SKILL: Record<string, string[]> = {
   'skill-velocity': ['tool-launch-rail', 'tool-forge-armature'],
 };
 
-function deriveToolLoadout(skills: SkillBadge[]) {
-  const preferredIds = skills.flatMap((badge) => TOOL_IDS_BY_SKILL[badge.id] ?? []);
-  const uniqueIds = Array.from(new Set(preferredIds));
-  const fallbackIds = ['tool-radar-array', 'tool-sandbox-ward', 'tool-search-probe'];
-
-  return [...uniqueIds, ...fallbackIds]
-    .slice(0, 3)
-    .map((id) => TOOL_BADGES.find((tool) => tool.id === id))
-    .filter((tool): tool is (typeof TOOL_BADGES)[number] => Boolean(tool));
-}
-
 const TOOL_KEYWORDS: Record<string, string[]> = {
   'tool-search-probe': ['search', 'grep', 'query', 'look up', 'probe'],
   'tool-workflow-grid': ['workflow', 'pipeline', 'task', 'plan', 'orchestrate'],
@@ -87,17 +79,7 @@ function slugify(value: string) {
 }
 
 function normalizePath(value: string) {
-  return value.replace(/\\/g, '/').replace(/^\.\//, '');
-}
-
-function isAllowedPath(path: string) {
-  if (path.includes('..') || path.startsWith('/')) {
-    return false;
-  }
-  if (ALLOWLIST.includes(path)) {
-    return true;
-  }
-  return /^skills\/[^/]+\/SKILL\.md$/i.test(path);
+  return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
 }
 
 function isDeniedPath(path: string) {
@@ -204,6 +186,17 @@ function fallbackSkillBadges(text: string, soulTraits: SoulTrait[]) {
   return [SKILL_BADGES[0], SKILL_BADGES[1], SKILL_BADGES[3]];
 }
 
+function deriveToolLoadout(skills: SkillBadge[]) {
+  const preferredIds = skills.flatMap((badge) => TOOL_IDS_BY_SKILL[badge.id] ?? []);
+  const uniqueIds = Array.from(new Set(preferredIds));
+  const fallbackIds = ['tool-radar-array', 'tool-sandbox-ward', 'tool-search-probe'];
+
+  return [...uniqueIds, ...fallbackIds]
+    .slice(0, 3)
+    .map((id) => TOOL_BADGES.find((tool) => tool.id === id))
+    .filter((tool): tool is (typeof TOOL_BADGES)[number] => Boolean(tool));
+}
+
 function fallbackTools(text: string, skills: SkillBadge[]) {
   const ranked = rankByKeywords(TOOL_BADGES, text, TOOL_KEYWORDS, 3);
   return ranked.length > 0 ? ranked : deriveToolLoadout(skills);
@@ -261,15 +254,67 @@ function parseIdentity(identityMarkdown: string, soulMarkdown: string): { name: 
 
 async function listZipEntries(zipPath: string) {
   const { stdout } = await execFile('unzip', ['-Z1', zipPath]);
-  return stdout
+  const rawEntries = stdout
     .split('\n')
     .map((entry) => normalizePath(entry.trim()))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((entry) => !entry.endsWith('/'));
+
+  const topLevel = new Set(rawEntries.map((entry) => entry.split('/')[0]).filter(Boolean));
+  const hasRootFiles = rawEntries.some((entry) => !entry.includes('/'));
+  const shouldStripRoot = topLevel.size === 1 && !hasRootFiles;
+
+  return rawEntries.map((rawPath) => ({
+    rawPath,
+    path: shouldStripRoot ? rawPath.split('/').slice(1).join('/') : rawPath,
+  }));
 }
 
-async function readZipText(zipPath: string, entryPath: string) {
-  const { stdout } = await execFile('unzip', ['-p', zipPath, entryPath], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+async function readZipText(zipPath: string, rawPath: string) {
+  const { stdout } = await execFile('unzip', ['-p', zipPath, rawPath], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
   return stdout;
+}
+
+async function readZipBuffer(zipPath: string, rawPath: string) {
+  const { stdout } = await execFile('unzip', ['-p', zipPath, rawPath], { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024 });
+  return stdout as Buffer;
+}
+
+async function buildZipBuffer(entries: Array<{ path: string; contents: Buffer }>) {
+  const tempDir = await mkdtemp(join(tmpdir(), 'clawpark-skill-'));
+  const outPath = join(tempDir, 'sanitized-skill.zip');
+
+  try {
+    await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = join(tempDir, entry.path);
+        await writeFile(fullPath, entry.contents, { flag: 'wx' }).catch(async (error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') {
+            const parent = fullPath.split('/').slice(0, -1).join('/');
+            if (parent) {
+              await mkdir(parent, { recursive: true });
+              await writeFile(fullPath, entry.contents);
+              return;
+            }
+          }
+          throw error;
+        });
+      }),
+    );
+
+    await execFile('python3', ['-c', `
+import pathlib, sys, zipfile
+base = pathlib.Path(sys.argv[1])
+out = pathlib.Path(sys.argv[2])
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for path in base.rglob('*'):
+        if path.is_file() and path != out:
+            zf.write(path, arcname=path.relative_to(base))
+`, tempDir, outPath]);
+    return await readFile(outPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 export interface ParsedOpenClawBundle {
@@ -277,25 +322,40 @@ export interface ParsedOpenClawBundle {
   manifest: ClawBundleManifest;
 }
 
+export interface ParsedOpenClawSkillBundle {
+  skill: PublishedSkill;
+  manifest: SkillBundleManifest;
+  bundleBytes: Buffer;
+}
+
 export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<ParsedOpenClawBundle> {
   const entries = await listZipEntries(zipPath);
-  const denied = entries.filter(isDeniedPath);
+  const denied = entries.filter((entry) => isDeniedPath(entry.path));
   if (denied.length > 0) {
-    throw new Error(`Upload contains restricted files: ${denied.slice(0, 3).join(', ')}`);
+    throw new Error(`Upload contains restricted files: ${denied.slice(0, 3).map((entry) => entry.path).join(', ')}`);
   }
 
-  const invalid = entries.filter((entry) => !isAllowedPath(entry));
-  const includedFiles = entries.filter(isAllowedPath);
+  const invalid = entries.filter((entry) => !CLAW_ALLOWLIST.includes(entry.path) && !/^skills\/[^/]+\/SKILL\.md$/i.test(entry.path));
+  const includedFiles = entries.filter((entry) => CLAW_ALLOWLIST.includes(entry.path) || /^skills\/[^/]+\/SKILL\.md$/i.test(entry.path));
 
-  if (!includedFiles.includes('IDENTITY.md') || !includedFiles.includes('SOUL.md')) {
+  if (!includedFiles.some((entry) => entry.path === 'IDENTITY.md') || !includedFiles.some((entry) => entry.path === 'SOUL.md')) {
     throw new Error('Workspace ZIP must include IDENTITY.md and SOUL.md.');
   }
 
-  const identityMarkdown = await readZipText(zipPath, 'IDENTITY.md');
-  const soulMarkdown = await readZipText(zipPath, 'SOUL.md');
-  const toolsMarkdown = includedFiles.includes('TOOLS.md') ? await readZipText(zipPath, 'TOOLS.md') : '';
+  const identityEntry = includedFiles.find((entry) => entry.path === 'IDENTITY.md');
+  const soulEntry = includedFiles.find((entry) => entry.path === 'SOUL.md');
+  if (!identityEntry || !soulEntry) {
+    throw new Error('Workspace ZIP must include IDENTITY.md and SOUL.md.');
+  }
+
+  const identityMarkdown = await readZipText(zipPath, identityEntry.rawPath);
+  const soulMarkdown = await readZipText(zipPath, soulEntry.rawPath);
+  const toolsEntry = includedFiles.find((entry) => entry.path === 'TOOLS.md');
+  const toolsMarkdown = toolsEntry ? await readZipText(zipPath, toolsEntry.rawPath) : '';
   const skillTexts = await Promise.all(
-    includedFiles.filter((entry) => /^skills\/[^/]+\/SKILL\.md$/i.test(entry)).map(async (entry) => ({ path: entry, text: await readZipText(zipPath, entry) })),
+    includedFiles
+      .filter((entry) => /^skills\/[^/]+\/SKILL\.md$/i.test(entry.path))
+      .map(async (entry) => ({ path: entry.path, text: await readZipText(zipPath, entry.rawPath) })),
   );
 
   const warnings: string[] = [];
@@ -329,10 +389,11 @@ export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<Parsed
   };
 
   const manifest: ClawBundleManifest = {
+    kind: 'claw',
     bundleVersion: 1,
     source: 'openclaw-workspace-zip',
-    includedFiles,
-    ignoredFiles: invalid,
+    includedFiles: includedFiles.map((entry) => entry.path),
+    ignoredFiles: invalid.map((entry) => entry.path),
     warnings,
     generatedAt: new Date().toISOString(),
     toolsVisibility: 'full',
@@ -340,4 +401,71 @@ export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<Parsed
   };
 
   return { claw, manifest };
+}
+
+export async function parseOpenClawSkillZip(zipPath: string): Promise<ParsedOpenClawSkillBundle> {
+  const entries = await listZipEntries(zipPath);
+  const denied = entries.filter((entry) => isDeniedPath(entry.path));
+  if (denied.length > 0) {
+    throw new Error(`Upload contains restricted files: ${denied.slice(0, 3).map((entry) => entry.path).join(', ')}`);
+  }
+
+  const includedFiles = entries.filter((entry) => SKILL_ALLOWLIST.some((pattern) => pattern.test(entry.path)));
+  const invalid = entries.filter((entry) => !SKILL_ALLOWLIST.some((pattern) => pattern.test(entry.path)));
+
+  const skillEntry = includedFiles.find((entry) => /^SKILL\.md$/i.test(entry.path));
+  if (!skillEntry) {
+    throw new Error('Skill ZIP must include SKILL.md at the bundle root.');
+  }
+
+  const skillMarkdown = await readZipText(zipPath, skillEntry.rawPath);
+  const frontmatter = parseFrontmatter(skillMarkdown);
+  const name = frontmatter.name || findField(skillMarkdown, ['name']) || firstHeading(skillMarkdown) || 'Unnamed Skill';
+  const description =
+    frontmatter.description ||
+    findField(skillMarkdown, ['description', 'summary']) ||
+    firstParagraph(skillMarkdown) ||
+    'Reusable OpenClaw skill bundle.';
+  const summary = description.length > 220 ? `${description.slice(0, 217)}...` : description;
+  const scriptFiles = includedFiles.filter((entry) => /^scripts\//i.test(entry.path)).map((entry) => entry.path);
+  const assetFiles = includedFiles.filter((entry) => /^assets\//i.test(entry.path)).map((entry) => entry.path);
+  const referenceFiles = includedFiles.filter((entry) => /^references\//i.test(entry.path) || /^README\.md$/i.test(entry.path)).map((entry) => entry.path);
+  const warnings: string[] = [];
+  if (invalid.length > 0) warnings.push(`Ignored ${invalid.length} non-public files from the upload.`);
+  if (scriptFiles.length === 0) warnings.push('No scripts/ files found; this skill publishes as instructions-only metadata.');
+
+  const skill: PublishedSkill = {
+    slug: slugify(frontmatter.slug || name) || `skill-${shortHash(name)}`,
+    name,
+    description,
+    summary,
+    entrypoint: 'SKILL.md',
+    scriptFiles,
+    assetFiles,
+    referenceFiles,
+  };
+
+  const manifest: SkillBundleManifest = {
+    kind: 'skill',
+    bundleVersion: 1,
+    source: 'openclaw-skill-zip',
+    includedFiles: includedFiles.map((entry) => entry.path),
+    ignoredFiles: invalid.map((entry) => entry.path),
+    warnings,
+    generatedAt: new Date().toISOString(),
+    entrypoint: 'SKILL.md',
+    scriptFiles,
+    assetFiles,
+    referenceFiles,
+  };
+
+  const bundleEntries = await Promise.all(
+    includedFiles.map(async (entry) => ({
+      path: entry.path,
+      contents: await readZipBuffer(zipPath, entry.rawPath),
+    })),
+  );
+  const bundleBytes = await buildZipBuffer(bundleEntries);
+
+  return { skill, manifest, bundleBytes };
 }

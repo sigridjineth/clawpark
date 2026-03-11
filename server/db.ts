@@ -2,6 +2,14 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+function ensureColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === column)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 export function createDatabase(filename: string) {
   mkdirSync(dirname(filename), { recursive: true });
   const db = new DatabaseSync(filename);
@@ -58,6 +66,13 @@ export function createDatabase(filename: string) {
     CREATE INDEX IF NOT EXISTS idx_drafts_user_id ON drafts(user_id);
     CREATE INDEX IF NOT EXISTS idx_listing_versions_listing_id ON listing_versions(listing_id);
   `);
+
+  ensureColumn(db, 'users', 'auth_kind', "TEXT NOT NULL DEFAULT 'discord'");
+  ensureColumn(db, 'listings', 'kind', "TEXT NOT NULL DEFAULT 'claw'");
+  ensureColumn(db, 'listings', 'trust', "TEXT NOT NULL DEFAULT 'verified'");
+  ensureColumn(db, 'listings', 'publisher_mode', "TEXT NOT NULL DEFAULT 'discord-session'");
+  ensureColumn(db, 'listings', 'install_hint', 'TEXT');
+
   return db;
 }
 

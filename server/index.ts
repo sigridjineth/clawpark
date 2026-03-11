@@ -1,14 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdirSync, existsSync, createReadStream } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync } from 'node:fs';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
-import { loadConfig, isDiscordAuthConfigured, type MarketplaceServerConfig } from './config.ts';
 import { createDatabase } from './db.ts';
+import { loadConfig, isDiscordAuthConfigured, type MarketplaceServerConfig } from './config.ts';
 import { createDiscordAuthUrl, exchangeDiscordCode, fetchDiscordUser } from './discord.ts';
 import { methodNotAllowed, notFound, readJson, readMultipartForm, redirect, sendError, sendJson } from './http.ts';
 import { createMarketplaceStore } from './marketplaceStore.ts';
-import { parseOpenClawWorkspaceZip } from './openclawParser.ts';
+import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from './openclawParser.ts';
 import {
   buildOauthStateCookie,
   buildSessionCookie,
@@ -28,7 +28,7 @@ function cleanPathname(pathname: string) {
 
 async function saveUploadedFile(file: File, dir: string) {
   await mkdir(dir, { recursive: true });
-  const tempPath = join(dir, `${randomUUID()}-${file.name || 'workspace.zip'}`);
+  const tempPath = join(dir, `${randomUUID()}-${file.name || 'bundle.zip'}`);
   const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(tempPath, buffer);
   return tempPath;
@@ -187,6 +187,72 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
         return;
       }
 
+      if (pathname === '/api/marketplace/ingest/claw') {
+        if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+        const formData = await readMultipartForm(req, url, config.maxUploadBytes);
+        const bundle = formData.get('bundle');
+        const publisherLabel = String(formData.get('publisherLabel') ?? '').trim() || 'Unsigned Publisher';
+        const title = String(formData.get('title') ?? '').trim() || undefined;
+        const summary = String(formData.get('summary') ?? '').trim() || undefined;
+        if (!(bundle instanceof File) || !bundle.name.toLowerCase().endsWith('.zip')) {
+          sendError(res, 400, 'Unsigned claw ingest requires a .zip bundle.');
+          return;
+        }
+
+        const uploadPath = await saveUploadedFile(bundle, join(config.storageDir, 'incoming'));
+        try {
+          const parsed = await parseOpenClawWorkspaceZip(uploadPath);
+          const listing = store.createUnsignedListing({
+            publisherLabel,
+            title,
+            summary,
+            listing: { kind: 'claw', value: parsed.claw, manifest: parsed.manifest },
+          });
+          sendJson(res, 201, listing);
+        } finally {
+          await rm(uploadPath, { force: true }).catch(() => undefined);
+        }
+        return;
+      }
+
+      if (pathname === '/api/marketplace/ingest/skill') {
+        if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+        const formData = await readMultipartForm(req, url, config.maxUploadBytes);
+        const bundle = formData.get('bundle');
+        const publisherLabel = String(formData.get('publisherLabel') ?? '').trim() || 'Unsigned Publisher';
+        const title = String(formData.get('title') ?? '').trim() || undefined;
+        const summary = String(formData.get('summary') ?? '').trim() || undefined;
+        if (!(bundle instanceof File) || !bundle.name.toLowerCase().endsWith('.zip')) {
+          sendError(res, 400, 'Unsigned skill ingest requires a .zip bundle.');
+          return;
+        }
+
+        const uploadPath = await saveUploadedFile(bundle, join(config.storageDir, 'incoming'));
+        try {
+          const parsed = await parseOpenClawSkillZip(uploadPath);
+          const listing = store.createUnsignedListing({
+            publisherLabel,
+            title,
+            summary,
+            artifact: {
+              bytes: parsed.bundleBytes,
+              extension: '.skill.zip',
+              contentType: 'application/zip',
+            },
+            listing: {
+              kind: 'skill',
+              value: parsed.skill,
+              manifest: parsed.manifest,
+              installHint: `Install into ~/.agents/skills/${parsed.skill.slug}`,
+            },
+          });
+          sendJson(res, 201, listing);
+        } finally {
+          await rm(uploadPath, { force: true }).catch(() => undefined);
+        }
+        return;
+      }
+
       const draftMatch = pathname.match(/^\/api\/marketplace\/drafts\/([^/]+)$/);
       if (draftMatch) {
         const draftId = decodeURIComponent(draftMatch[1]);
@@ -236,12 +302,12 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
       if (bundleMatch) {
         if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
         const slug = decodeURIComponent(bundleMatch[1]);
-        const bundlePath = store.getListingBundlePath(slug);
-        if (!bundlePath) return sendError(res, 404, 'Listing bundle not found.');
-        const contents = await readFile(bundlePath, 'utf8');
+        const artifact = store.getListingArtifact(slug);
+        if (!artifact) return sendError(res, 404, 'Listing bundle not found.');
+        const contents = await readFile(artifact.path);
         res.writeHead(200, {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${slug}.bundle.json"`,
+          'Content-Type': artifact.contentType,
+          'Content-Disposition': `attachment; filename="${artifact.filename}"`,
         });
         res.end(contents);
         return;

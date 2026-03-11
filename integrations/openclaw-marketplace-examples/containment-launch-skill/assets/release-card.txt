@@ -1,0 +1,7 @@
+Containment Launch
+==================
+
+- Confirm the launch window
+- Run smoke checks
+- Verify rollback path
+- Post operator handoff note

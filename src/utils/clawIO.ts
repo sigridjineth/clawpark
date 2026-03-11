@@ -1,18 +1,25 @@
 import type { Claw } from '../types/claw';
-import type { ClawBundle } from '../types/marketplace';
+import type { ClawBundle, MarketplaceBundle } from '../types/marketplace';
 
 const STORAGE_KEY = 'clawpark-gallery';
 
-function downloadJson(data: unknown, filename: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+function downloadJson(data: unknown, filename: string) {
+  triggerDownload(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), filename);
+}
+
+export function downloadBlobFile(blob: Blob, filename: string) {
+  triggerDownload(blob, filename);
 }
 
 /** Save claws to localStorage. */
@@ -74,7 +81,13 @@ function isValidClaw(obj: unknown): obj is Claw {
 function isClawBundle(obj: unknown): obj is ClawBundle {
   if (!obj || typeof obj !== 'object') return false;
   const record = obj as Record<string, unknown>;
-  return isValidClaw(record.claw) && typeof record.manifest === 'object' && record.manifest !== null;
+  return record.kind === 'claw' && isValidClaw(record.claw) && typeof record.manifest === 'object' && record.manifest !== null;
+}
+
+function isMarketplaceBundle(obj: unknown): obj is MarketplaceBundle {
+  if (!obj || typeof obj !== 'object') return false;
+  const record = obj as Record<string, unknown>;
+  return record.kind === 'claw' || record.kind === 'skill';
 }
 
 /** Import claws from a JSON file. Returns imported claws or an error string. */
@@ -84,6 +97,13 @@ export function parseClawImport(json: string): { claws: Claw[] } | { error: stri
 
     if (isClawBundle(parsed)) {
       return { claws: [parsed.claw] };
+    }
+
+    if (isMarketplaceBundle(parsed)) {
+      if (parsed.kind === 'claw' && isValidClaw(parsed.claw)) {
+        return { claws: [parsed.claw] };
+      }
+      return { error: 'This bundle contains a skill listing, not a claimable Claw.' };
     }
 
     if (isValidClaw(parsed)) {

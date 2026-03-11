@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, ShieldCheck, BadgePlus, LogIn } from 'lucide-react';
+import { ArrowLeft, BadgePlus, Download, LogIn, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import {
   buildClawTalkProfile,
   getClawIdentity,
@@ -7,11 +7,9 @@ import {
   summarizeSoul,
   summarizeTools,
 } from '../../engine/openclaw';
-import type { Claw } from '../../types/claw';
-import type { MarketplaceDraft, MarketplaceListing, MarketplaceSession } from '../../types/marketplace';
 import {
   createMarketplaceDraft,
-  downloadMarketplaceBundle,
+  downloadMarketplaceArtifact,
   getDiscordAuthUrl,
   getMarketplaceListings,
   getMarketplaceSession,
@@ -19,7 +17,9 @@ import {
   updateMarketplaceDraft,
 } from '../../services/marketplaceApi';
 import { MARKETPLACE_SEED_LISTINGS } from '../../services/marketplaceSeed';
-import { exportAllClaws, exportClaw, exportClawBundle, parseClawImport } from '../../utils/clawIO';
+import type { Claw } from '../../types/claw';
+import type { MarketplaceDraft, MarketplaceListing, MarketplaceSession, MarketplaceSkillListing } from '../../types/marketplace';
+import { downloadBlobFile, exportAllClaws, exportClaw, parseClawImport } from '../../utils/clawIO';
 import { ClawAvatar } from '../shared/ClawAvatar';
 
 interface MarketplaceProps {
@@ -30,20 +30,37 @@ interface MarketplaceProps {
 }
 
 type MarketplaceTab = 'browse' | 'publish';
+type BrowseKind = 'claw' | 'skill';
 
-function listingWarning(listing: MarketplaceListing) {
-  return listing.manifest.warnings[0] ?? null;
+function trustTone(listing: MarketplaceListing) {
+  return listing.trust === 'verified'
+    ? 'border-fern/30 bg-fern/10 text-fern'
+    : 'border-amber/30 bg-amber/10 text-amber';
+}
+
+function publisherLabel(listing: MarketplaceListing) {
+  return listing.publisher.kind === 'discord'
+    ? listing.publisher.discordHandle || listing.publisher.displayName
+    : listing.publisher.displayName;
+}
+
+function localSkillSnippet(skill: MarketplaceSkillListing) {
+  return [
+    `mkdir -p ~/.agents/skills/${skill.skill.slug}`,
+    `unzip ${skill.slug}.skill.zip -d ~/.agents/skills/${skill.skill.slug}`,
+  ].join('\n');
 }
 
 export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: MarketplaceProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const uploadRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const ownedIds = useMemo(() => new Set(ownedClaws.map((c) => c.id)), [ownedClaws]);
+  const ownedIds = useMemo(() => new Set(ownedClaws.map((claw) => claw.id)), [ownedClaws]);
 
   const [tab, setTab] = useState<MarketplaceTab>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('marketplace') === 'publish' ? 'publish' : 'browse';
   });
+  const [browseKind, setBrowseKind] = useState<BrowseKind>('claw');
   const [session, setSession] = useState<MarketplaceSession>({ user: null, authConfigured: false });
   const [listings, setListings] = useState<MarketplaceListing[]>(MARKETPLACE_SEED_LISTINGS);
   const [apiNotice, setApiNotice] = useState<string | null>('Marketplace API offline — showing local seed listings.');
@@ -87,8 +104,13 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
     setCoverStyle(draft.manifest.coverStyle);
   }, [draft]);
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const filteredListings = useMemo(
+    () => listings.filter((listing) => listing.kind === browseKind),
+    [browseKind, listings],
+  );
+
+  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -116,7 +138,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       setStatusMessage(error instanceof Error ? error.message : 'Failed to parse upload.');
     } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = '';
+      if (uploadRef.current) uploadRef.current.value = '';
     }
   };
 
@@ -154,6 +176,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       setListings((current) => [listing, ...current.filter((item) => item.slug !== listing.slug)]);
       setStatusMessage(`Published ${listing.title} to the marketplace.`);
       setTab('browse');
+      setBrowseKind('claw');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to publish draft.');
     } finally {
@@ -162,20 +185,32 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
   };
 
   const handleDownloadListing = async (listing: MarketplaceListing) => {
-    try {
-      if (listing.bundleDownloadUrl) {
-        const bundle = await downloadMarketplaceBundle(listing.slug);
-        exportClawBundle(bundle, `${listing.slug}.bundle.json`);
-        setStatusMessage(`Downloaded ${listing.title}.`);
-        return;
-      }
+    if (!listing.bundleDownloadUrl) {
+      setStatusMessage('Download is only available when the live marketplace API is online.');
+      return;
+    }
 
-      exportClawBundle({ claw: listing.claw, manifest: listing.manifest }, `${listing.slug}.bundle.json`);
+    try {
+      const extension = listing.kind === 'skill' ? '.skill.zip' : '.bundle.json';
+      const artifact = await downloadMarketplaceArtifact(listing.slug, `${listing.slug}${extension}`);
+      downloadBlobFile(artifact.blob, artifact.filename);
       setStatusMessage(`Downloaded ${listing.title}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to download bundle.');
     }
   };
+
+  const handleCopyInstallHint = async (listing: MarketplaceSkillListing) => {
+    const text = `${listing.installHint}\n${localSkillSnippet(listing)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatusMessage(`Copied install steps for ${listing.title}.`);
+    } catch {
+      setStatusMessage('Clipboard access is unavailable in this browser.');
+    }
+  };
+
+  const marketplaceOrigin = window.location.origin;
 
   return (
     <section className="space-y-4">
@@ -190,7 +225,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
             <div className="jp-label">Restricted wing</div>
             <h2 className="mt-1 font-display text-4xl text-bone">Marketplace</h2>
             <p className="mt-2 max-w-2xl text-sm text-bone-muted">
-              Publish a real OpenClaw workspace as a public specimen listing, or claim and download published bundles.
+              Browse published claws and skills, or publish a verified Claw workspace through Discord sign-in.
             </p>
           </div>
 
@@ -221,80 +256,141 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       </div>
 
       {tab === 'browse' ? (
-        <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {listings.map((listing) => {
-              const owned = ownedIds.has(listing.claw.id);
-              const identity = getClawIdentity(listing.claw);
-              const warning = listingWarning(listing);
+        <div className="grid gap-3 xl:grid-cols-[1.45fr_1fr]">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setBrowseKind('claw')} className={browseKind === 'claw' ? 'jp-btn' : 'jp-btn-secondary'}>
+                Browse Claws
+              </button>
+              <button type="button" onClick={() => setBrowseKind('skill')} className={browseKind === 'skill' ? 'jp-btn' : 'jp-btn-secondary'}>
+                Browse Skills
+              </button>
+            </div>
 
-              return (
-                <article key={listing.slug} className="jp-card flex flex-col gap-4 p-4">
-                  <div className="flex items-start gap-3">
-                    <ClawAvatar visual={listing.claw.visual} name={listing.claw.name} size={84} />
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-display text-2xl text-bone">{listing.title}</h3>
-                        <span className="jp-pill">v{listing.currentVersion.version}</span>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredListings.map((listing) => {
+                if (listing.kind === 'skill') {
+                  return (
+                    <article key={listing.slug} className="jp-card flex flex-col gap-4 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-display text-2xl text-bone">{listing.title}</h3>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${trustTone(listing)}`}>
+                              {listing.trust === 'verified' ? 'Verified' : 'Unverified'}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-sm text-amber">Skill bundle</div>
+                          <div className="mt-1 text-xs text-bone-muted">{publisherLabel(listing)} · {listing.publisherMode === 'local-skill' ? 'Local skill publish' : 'Managed publish'}</div>
+                        </div>
+                        <Sparkles className="h-5 w-5 text-amber" />
                       </div>
-                      <div className="text-sm text-amber">{listing.claw.archetype}</div>
-                      <div className="mt-1 text-xs text-bone-muted">
-                        {identity.emoji} {identity.creature} · {listing.publisher.discordHandle}
+
+                      <p className="text-sm text-bone-muted">{listing.summary}</p>
+
+                      <div className="space-y-2 text-sm text-bone-dim">
+                        <p><span className="text-bone">Entrypoint.</span> {listing.skill.entrypoint}</p>
+                        <p><span className="text-bone">Scripts.</span> {listing.skill.scriptFiles.length ? listing.skill.scriptFiles.join(', ') : 'None'}</p>
+                        <p><span className="text-bone">Assets.</span> {listing.skill.assetFiles.length ? listing.skill.assetFiles.join(', ') : 'None'}</p>
+                      </div>
+
+                      <div className="rounded-md border border-jungle-700 bg-jungle-900/70 px-3 py-2 text-xs text-bone-dim">
+                        {listing.installHint}
+                      </div>
+
+                      <div className="mt-auto flex flex-wrap gap-2">
+                        <button type="button" onClick={() => void handleDownloadListing(listing)} className="jp-btn flex-1 text-xs" disabled={!listing.bundleDownloadUrl}>
+                          <Download className="h-3.5 w-3.5" />
+                          Download Skill
+                        </button>
+                        <button type="button" onClick={() => void handleCopyInstallHint(listing)} className="jp-btn-secondary flex-1 text-xs">
+                          Copy install steps
+                        </button>
+                      </div>
+                    </article>
+                  );
+                }
+
+                const owned = ownedIds.has(listing.claw.id);
+                const identity = getClawIdentity(listing.claw);
+
+                return (
+                  <article key={listing.slug} className="jp-card flex flex-col gap-4 p-4">
+                    <div className="flex items-start gap-3">
+                      <ClawAvatar visual={listing.claw.visual} name={listing.claw.name} size={84} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-display text-2xl text-bone">{listing.title}</h3>
+                          <span className="jp-pill">v{listing.currentVersion.version}</span>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${trustTone(listing)}`}>
+                            {listing.trust === 'verified' ? 'Verified' : 'Unverified'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-amber">{listing.claw.archetype}</div>
+                        <div className="mt-1 text-xs text-bone-muted">
+                          {identity.emoji} {identity.creature} · {publisherLabel(listing)}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <p className="text-sm text-bone-muted">{listing.summary}</p>
+                    <p className="text-sm text-bone-muted">{listing.summary}</p>
 
-                  <div className="space-y-2 text-sm text-bone-dim">
-                    <p><span className="text-bone">Identity.</span> {buildClawTalkProfile(listing.claw).identity}</p>
-                    <p><span className="text-bone">Soul.</span> {summarizeSoul(listing.claw)}</p>
-                    <p><span className="text-bone">Skills.</span> {summarizeSkills(listing.claw)}</p>
-                    <p><span className="text-bone">Tools.</span> {summarizeTools(listing.claw)}</p>
-                  </div>
+                    <div className="space-y-2 text-sm text-bone-dim">
+                      <p><span className="text-bone">Identity.</span> {buildClawTalkProfile(listing.claw).identity}</p>
+                      <p><span className="text-bone">Soul.</span> {summarizeSoul(listing.claw)}</p>
+                      <p><span className="text-bone">Skills.</span> {summarizeSkills(listing.claw)}</p>
+                      <p><span className="text-bone">Tools.</span> {summarizeTools(listing.claw)}</p>
+                    </div>
 
-                  {warning && <div className="rounded-md border border-amber/20 bg-amber/10 px-3 py-2 text-xs text-amber">{warning}</div>}
-
-                  <div className="mt-auto flex flex-wrap gap-2">
-                    <button type="button" onClick={() => onClaim(listing.claw)} className="jp-btn flex-1 text-xs" disabled={owned}>
-                      {owned ? 'Owned' : 'Claim'}
-                    </button>
-                    <button type="button" onClick={() => handleDownloadListing(listing)} className="jp-btn-secondary flex-1 text-xs">
-                      <Download className="h-3.5 w-3.5" />
-                      Download Bundle
-                    </button>
-                    {owned && (
-                      <button type="button" onClick={() => exportClaw(listing.claw)} className="jp-btn-secondary text-xs">
-                        Export
-                      </button>
+                    {listing.trust === 'unsigned' && (
+                      <div className="rounded-md border border-amber/20 bg-amber/10 px-3 py-2 text-xs text-amber">
+                        Published via local skill without marketplace authentication. Treat as unverified.
+                      </div>
                     )}
-                  </div>
-                </article>
-              );
-            })}
+
+                    <div className="mt-auto flex flex-wrap gap-2">
+                      <button type="button" onClick={() => onClaim(listing.claw)} className="jp-btn flex-1 text-xs" disabled={owned}>
+                        {owned ? 'Owned' : 'Claim'}
+                      </button>
+                      <button type="button" onClick={() => void handleDownloadListing(listing)} className="jp-btn-secondary flex-1 text-xs" disabled={!listing.bundleDownloadUrl}>
+                        <Download className="h-3.5 w-3.5" />
+                        Download Bundle
+                      </button>
+                      {owned && (
+                        <button type="button" onClick={() => exportClaw(listing.claw)} className="jp-btn-secondary text-xs">
+                          Export
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
 
-          <aside className="jp-card p-5 text-sm text-bone-dim">
-            <div className="jp-label">Registry contract</div>
-            <h3 className="mt-2 font-display text-3xl text-bone">Public bundle</h3>
-            <p className="mt-3">
-              Listings are published as sanitized Claw bundles. Raw OpenClaw workspaces are not exposed. Only Identity, Soul, Tools, and skills/*/SKILL.md are normalized into a public specimen record.
+          <aside className="jp-card space-y-4 p-5 text-sm text-bone-dim">
+            <div>
+              <div className="jp-label">Registry contract</div>
+              <h3 className="mt-2 font-display text-3xl text-bone">Verified vs local</h3>
+            </div>
+            <p>
+              Verified claw listings come from the Discord-authenticated draft flow. Local skill publishing can add both claws and standalone skills directly to the shared registry, but those listings are marked <span className="text-amber">Unverified</span> and are create-only.
             </p>
-            <ul className="mt-4 space-y-2">
-              <li>• Claim imports the published specimen into your gallery.</li>
-              <li>• Download gives you the normalized bundle JSON.</li>
-              <li>• Seed listings appear when the SQLite API is offline.</li>
+            <ul className="space-y-2">
+              <li>• Claw listings can be claimed into the gallery.</li>
+              <li>• Skill listings download as installable skill bundles.</li>
+              <li>• Unsigned local-skill publish never overwrites an existing listing.</li>
             </ul>
           </aside>
         </div>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-[1.1fr_1fr]">
+        <div className="grid gap-3 xl:grid-cols-[1.05fr_1fr]">
           <section className="jp-card space-y-4 p-5">
             <div>
-              <div className="jp-label">Containment intake</div>
-              <h3 className="mt-2 font-display text-3xl text-bone">Publish OpenClaw workspace</h3>
+              <div className="jp-label">Managed publish</div>
+              <h3 className="mt-2 font-display text-3xl text-bone">Verified Claw listing</h3>
               <p className="mt-2 text-sm text-bone-muted">
-                Upload a ZIP from your real OpenClaw workspace. The server extracts only public, allowlisted files and creates a draft for review.
+                Sign in with Discord, upload an OpenClaw workspace ZIP, review the draft, then publish a verified claw listing.
               </p>
             </div>
 
@@ -310,7 +406,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                         Sign in with Discord
                       </a>
                     ) : (
-                      <p className="text-xs text-amber">Discord OAuth is not configured on this server yet. Seed browse mode still works.</p>
+                      <p className="text-xs text-amber">Discord OAuth is not configured on this server yet. Local-skill publish can still write unverified listings.</p>
                     )}
                   </div>
                 </div>
@@ -326,12 +422,12 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                 <div className="rounded-lg border border-dashed border-amber/30 bg-jungle-900/70 p-4">
                   <div className="text-sm text-bone-dim">Accepted input: ZIP containing IDENTITY.md, SOUL.md, optional TOOLS.md, and skills/*/SKILL.md.</div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => fileRef.current?.click()} className="jp-btn" disabled={busy}>
+                    <button type="button" onClick={() => uploadRef.current?.click()} className="jp-btn" disabled={busy}>
                       <BadgePlus className="h-4 w-4" />
                       Upload workspace ZIP
                     </button>
                     <input
-                      ref={fileRef}
+                      ref={uploadRef}
                       type="file"
                       accept=".zip,application/zip"
                       className="hidden"
@@ -344,27 +440,15 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                 </div>
               </>
             )}
-          </section>
 
-          <section className="jp-card space-y-4 p-5">
-            <div>
-              <div className="jp-label">Draft review</div>
-              <h3 className="mt-2 font-display text-3xl text-bone">Specimen preview</h3>
-            </div>
-
-            {!draft ? (
-              <p className="text-sm text-bone-muted">No draft loaded yet. Upload a workspace ZIP after signing in.</p>
-            ) : (
-              <>
-                <div className="flex items-start gap-3 rounded-lg border border-jungle-700 bg-jungle-900/70 p-4">
+            {draft && (
+              <div className="space-y-4 rounded-lg border border-jungle-700 bg-jungle-900/70 p-4">
+                <div className="flex items-start gap-3">
                   <ClawAvatar visual={draft.claw.visual} name={draft.claw.name} size={84} />
-                  <div className="min-w-0 space-y-2">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Parsed specimen</div>
-                      <div className="font-display text-2xl text-bone">{draft.claw.name}</div>
-                      <div className="text-sm text-amber">{draft.claw.archetype}</div>
-                    </div>
-                    <p className="text-sm text-bone-dim">{draft.claw.intro}</p>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Draft preview</div>
+                    <div className="font-display text-2xl text-bone">{draft.claw.name}</div>
+                    <div className="text-sm text-amber">{draft.claw.archetype}</div>
                   </div>
                 </div>
 
@@ -395,29 +479,40 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                   </label>
                 </div>
 
-                <div className="rounded-md border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
-                  <p><span className="text-bone">Identity.</span> {buildClawTalkProfile(draft.claw).identity}</p>
-                  <p className="mt-2"><span className="text-bone">Soul.</span> {summarizeSoul(draft.claw)}</p>
-                  <p className="mt-2"><span className="text-bone">Skills.</span> {summarizeSkills(draft.claw)}</p>
-                  <p className="mt-2"><span className="text-bone">Tools.</span> {summarizeTools(draft.claw)}</p>
-                </div>
-
-                {draft.manifest.warnings.length > 0 && (
-                  <div className="rounded-md border border-amber/20 bg-amber/10 px-3 py-2 text-xs text-amber">
-                    {draft.manifest.warnings.join(' ')}
-                  </div>
-                )}
-
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => void saveDraft()} className="jp-btn-secondary" disabled={busy}>
                     Save draft
                   </button>
                   <button type="button" onClick={() => void publishDraft()} className="jp-btn" disabled={busy}>
-                    Publish listing
+                    Publish verified listing
                   </button>
                 </div>
-              </>
+              </div>
             )}
+          </section>
+
+          <section className="jp-card space-y-4 p-5">
+            <div>
+              <div className="jp-label">Local skill bridge</div>
+              <h3 className="mt-2 font-display text-3xl text-bone">Moltbot-style publish</h3>
+              <p className="mt-2 text-sm text-bone-muted">
+                Install the publisher skill into your real OpenClaw workspace. It can upload either the current claw workspace or a standalone skill folder directly into the marketplace as an unverified listing.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
+              <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Install</div>
+              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-bone">cp -R integrations/openclaw-marketplace-publisher ~/.agents/skills/marketplace-publisher</pre>
+            </div>
+
+            <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
+              <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Environment</div>
+              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-bone">export CLAWPARK_MARKETPLACE_URL={marketplaceOrigin}</pre>
+            </div>
+
+            <div className="rounded-lg border border-amber/20 bg-amber/10 p-4 text-xs text-amber">
+              Local skill publish is public but unverified. It creates new immutable listings and never edits an existing marketplace entry.
+            </div>
           </section>
         </div>
       )}

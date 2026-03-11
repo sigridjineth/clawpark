@@ -7,7 +7,8 @@ The app lets you:
 - inspect their `Identity`, `Soul`, `Skills`, and `Tools`
 - talk to each parent before breeding
 - generate a child with lineage, transcript, and doctrine
-- publish a sanitized OpenClaw workspace bundle into the marketplace
+- publish verified Claw listings through Discord-authenticated draft flow
+- publish unverified Claw or Skill listings through a Moltbot-style local skill bridge
 - download or claim published marketplace specimens
 
 ## Current product direction
@@ -27,6 +28,24 @@ Each Claw is modeled across four dimensions:
 - **Skills** — reusable capabilities
 - **Tools** — preferred operational loadout
 
+## Marketplace listing kinds
+
+### 1. Claw listings
+- source: full OpenClaw workspace ZIP
+- output: normalized public bundle JSON
+- can be claimed/imported into ClawPark
+
+### 2. Skill listings
+- source: standalone skill ZIP rooted at `SKILL.md`
+- output: sanitized installable skill ZIP
+- can be downloaded into an OpenClaw skills directory
+
+## Trust model
+
+- **Verified** listings come from the Discord-authenticated draft flow.
+- **Unverified** listings come from the local OpenClaw skill publisher.
+- Unverified listings are public but create-only; they do not overwrite earlier listings.
+
 ## Main flow
 
 1. Browse the catalogue
@@ -38,9 +57,9 @@ Each Claw is modeled across four dimensions:
 7. Review the child reveal, doctrine, and transcript
 8. Inspect recursive lineage
 9. Save/export the new specimen
-10. Publish a real OpenClaw workspace ZIP into Marketplace
+10. Publish a Claw or Skill into Marketplace
 
-## Marketplace upload flow
+## Verified marketplace publish flow
 
 1. Start the marketplace server
 2. Sign in with Discord
@@ -53,22 +72,49 @@ Each Claw is modeled across four dimensions:
 5. Publish the listing
 6. Other users can browse, download the normalized bundle JSON, or claim the specimen into ClawPark
 
-Only sanitized normalized bundles are published. Raw workspaces are not exposed publicly.
+## Moltbot-style local skill publish flow
+
+Install the local publisher skill:
+
+```bash
+cp -R integrations/openclaw-marketplace-publisher ~/.agents/skills/marketplace-publisher
+export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
+```
+
+### Publish the current Claw workspace
+```bash
+cd /path/to/openclaw-workspace
+python3 ~/.agents/skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
+```
+
+### Publish a standalone skill
+```bash
+python3 ~/.agents/skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
+```
+
+The local skill publisher writes unverified marketplace listings for shared browsing.
 
 ## Local development
 
-### Frontend
+### Full local development
 ```bash
 npm install
-npm run dev
-```
-
-### Marketplace server
-```bash
 export MARKETPLACE_SESSION_SECRET="change-me"
 export DISCORD_CLIENT_ID="..."
 export DISCORD_CLIENT_SECRET="..."
 export DISCORD_REDIRECT_URI="http://localhost:8787/api/auth/discord/callback"
+npm run dev
+```
+
+`npm run dev` now starts both the Vite frontend and the SQLite marketplace server together.
+
+### Frontend only
+```bash
+npm run dev:web
+```
+
+### Marketplace server only
+```bash
 npm run server:dev
 ```
 

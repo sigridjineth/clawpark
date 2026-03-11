@@ -1,10 +1,10 @@
 // @vitest-environment node
 import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseOpenClawWorkspaceZip } from '../../server/openclawParser.ts';
+import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from '../../server/openclawParser.ts';
 
 function createWorkspaceZip(files: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), 'clawpark-parser-'));
@@ -30,8 +30,8 @@ afterEach(() => {
   // temp dirs are deleted per-test manually
 });
 
-describe('parseOpenClawWorkspaceZip', () => {
-  it('normalizes a valid OpenClaw bundle into a public Claw draft', async () => {
+describe('openclaw bundle parsers', () => {
+  it('normalizes a valid OpenClaw claw bundle into a public draft', async () => {
     const { dir, zipPath } = createWorkspaceZip({
       'IDENTITY.md': '# Ember\nName: Ember\nCreature: Signal Raptor\nRole: The Park Tactician\nDirective: Coordinate the enclosure without dropping the thread.\nVibe: Calm · Exact\nEmoji: 🦖\n',
       'SOUL.md': '# Soul\nCore truths: analyze systems, document decisions, enforce boundaries.\n',
@@ -47,17 +47,37 @@ describe('parseOpenClawWorkspaceZip', () => {
       expect(result.claw.soul.traits.length).toBeGreaterThan(0);
       expect(result.claw.skills.badges.length).toBeGreaterThan(0);
       expect(result.claw.tools?.loadout.length).toBeGreaterThan(0);
+      expect(result.manifest.kind).toBe('claw');
       expect(result.manifest.includedFiles).toContain('IDENTITY.md');
-      expect(result.manifest.includedFiles).toContain('SOUL.md');
       expect(result.manifest.includedFiles.some((entry) => entry.endsWith('SKILL.md'))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('rejects restricted files and missing required identity/soul files', async () => {
+  it('parses a skill zip and emits an installable skill bundle', async () => {
+    const { dir, zipPath } = createWorkspaceZip({
+      'park-audit/SKILL.md': '---\nname: Park Audit\ndescription: Scan the enclosure for failures.\n---\nReview the current park state and challenge weak assumptions.',
+      'park-audit/scripts/audit.py': 'print("audit")\n',
+      'park-audit/references/checklist.md': '# checklist\n',
+    });
+
+    try {
+      const result = await parseOpenClawSkillZip(zipPath);
+      expect(result.skill.name).toBe('Park Audit');
+      expect(result.skill.scriptFiles).toContain('scripts/audit.py');
+      expect(result.manifest.kind).toBe('skill');
+      expect(result.manifest.entrypoint).toBe('SKILL.md');
+      expect(result.bundleBytes.byteLength).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects restricted files', async () => {
     const { dir, zipPath } = createWorkspaceZip({
       'IDENTITY.md': '# Phantom',
+      'SOUL.md': '# Soul',
       'AGENTS.md': 'top secret',
     });
 
