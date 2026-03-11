@@ -10,8 +10,7 @@ function renderApp() {
 }
 
 function clickClawCard(name: string) {
-  const buttons = screen.getAllByRole('button', { name: new RegExp(`^${name}$`, 'i') });
-  fireEvent.click(buttons[0]);
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^Select ${name}$`, 'i') }));
 }
 
 describe('ClawPark catalogue-first UI contracts', () => {
@@ -42,6 +41,20 @@ describe('ClawPark catalogue-first UI contracts', () => {
       expect(enterBreedLab).toBeEnabled();
       expect(useClawStore.getState().selectedIds).toEqual(['claw-001', 'claw-002']);
     });
+  });
+
+  it('opens a specimen dossier when a claw card is clicked', async () => {
+    renderApp();
+
+    await screen.findByText(/ClawPark/i);
+    fireEvent.click(screen.getByRole('button', { name: /^Sage$/i }));
+
+    expect(await screen.findByText(/Specimen dossier/i)).toBeInTheDocument();
+    expect(screen.getByText(/Identity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Soul/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skills/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tools/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Select Sage/i })).toBeInTheDocument();
   });
 
   it('keeps the breed lab prediction and trait-bias controls in the main browse flow', async () => {

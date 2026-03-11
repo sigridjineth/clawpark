@@ -7,12 +7,13 @@ import { ClawAvatar } from '../shared/ClawAvatar';
 interface ClawCardProps {
   claw: Claw;
   selected: boolean;
+  onInspect: () => void;
   onSelect: () => void;
   onExport: () => void;
   demoMode: boolean;
 }
 
-export function ClawCard({ claw, selected, onSelect, onExport, demoMode }: ClawCardProps) {
+export function ClawCard({ claw, selected, onInspect, onSelect, onExport, demoMode }: ClawCardProps) {
   const isDemoHighlight = demoMode && DEMO_PARENT_IDS.includes(claw.id as (typeof DEMO_PARENT_IDS)[number]);
   const identity = getClawIdentity(claw);
 
@@ -25,7 +26,7 @@ export function ClawCard({ claw, selected, onSelect, onExport, demoMode }: ClawC
       }`}
     >
       {/* Main clickable area */}
-      <button type="button" onClick={onSelect} className="flex flex-col gap-3 text-left" aria-label={claw.name}>
+      <button type="button" onClick={onInspect} className="flex flex-col gap-3 text-left" aria-label={claw.name}>
         <div className="flex items-start justify-between">
           <div>
             <div className="font-display text-2xl leading-none text-bone">{claw.name}</div>
@@ -70,16 +71,30 @@ export function ClawCard({ claw, selected, onSelect, onExport, demoMode }: ClawC
         </div>
       </button>
 
-      {/* Export button */}
-      <button
-        type="button"
-        onClick={onExport}
-        className="flex items-center justify-center gap-1.5 rounded-md border border-jungle-600/40 bg-jungle-950 py-1.5 text-[10px] font-bold uppercase tracking-wider text-bone-muted transition hover:border-fern/40 hover:text-bone-dim"
-        aria-label={`Export ${claw.name}`}
-      >
-        <Download className="h-3 w-3" />
-        Export
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onSelect}
+          className={`rounded-md border py-1.5 text-[10px] font-bold uppercase tracking-wider transition ${
+            selected
+              ? 'border-amber/40 bg-amber/15 text-amber-light'
+              : 'border-jungle-600/40 bg-jungle-950 text-bone-muted hover:border-amber/30 hover:text-bone'
+          }`}
+          aria-label={`${selected ? 'Deselect' : 'Select'} ${claw.name}`}
+        >
+          {selected ? 'Deselect' : 'Select'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onExport}
+          className="flex items-center justify-center gap-1.5 rounded-md border border-jungle-600/40 bg-jungle-950 py-1.5 text-[10px] font-bold uppercase tracking-wider text-bone-muted transition hover:border-fern/40 hover:text-bone-dim"
+          aria-label={`Export ${claw.name}`}
+        >
+          <Download className="h-3 w-3" />
+          Export
+        </button>
+      </div>
     </div>
   );
 }

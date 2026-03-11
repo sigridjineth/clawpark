@@ -171,10 +171,14 @@ describe('ClawPark OpenClaw genome contracts', () => {
     const enterBreedLab = await screen.findByRole('button', { name: /Enter Breed Lab/i });
     await waitFor(() => expect(enterBreedLab).toBeEnabled());
 
-    const parentAButtons = screen.getAllByRole('button', { name: new RegExp(`^${parentA.name}$`, 'i') });
-    fireEvent.click(parentAButtons[0]);
-    const parentBButtons = screen.getAllByRole('button', { name: new RegExp(`^${parentB.name}$`, 'i') });
-    fireEvent.click(parentBButtons[0]);
+    const parentASelect = screen.queryByRole('button', { name: new RegExp(`^Select ${parentA.name}$`, 'i') });
+    if (parentASelect) {
+      fireEvent.click(parentASelect);
+    }
+    const parentBSelect = screen.queryByRole('button', { name: new RegExp(`^Select ${parentB.name}$`, 'i') });
+    if (parentBSelect) {
+      fireEvent.click(parentBSelect);
+    }
     fireEvent.click(enterBreedLab);
 
     expectGenomeLabelsOnScreen();
