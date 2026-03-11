@@ -1,164 +1,209 @@
-# ClawPark TODO — What remains to reach a CryptoKitties-like loop
+# ClawPark TODO — Team-split roadmap for a CryptoKitties-like product
 
-This file tracks the remaining work to make ClawPark behave more like a real CryptoKitties-style product where users can publish their own Claws, sell them, buy them, and breed owned specimens over time.
-
-## Current baseline
-
-### Already implemented
-- [x] Claw gallery and breeding flow
-- [x] Child reveal, doctrine, transcript, and lineage
-- [x] SQLite-backed marketplace server
-- [x] Verified Claw publishing via Discord-authenticated draft flow
-- [x] Unverified local-skill publishing for Claws and Skills
-- [x] Claim/import flow for Claw listings
-- [x] Local example bundles for one Claw and two Skills
-- [x] Seed marketplace data wired to checked-in examples
-
-### Not yet implemented
-- [ ] Real ownership model
-- [ ] Listing inventory and sale state
-- [ ] Purchase flow and transfer of ownership
-- [ ] Breeding permissions based on ownership
-- [ ] Price model / auction / sale mechanics
-- [ ] Persistent per-user portfolio across sessions
-- [ ] Live seller dashboard
-- [ ] Marketplace search, filters, and sorting
-- [ ] Anti-spam / moderation / fraud controls
-- [ ] Production-grade deploy and ops
+This document rewrites the remaining work as a team-split task list.
+The goal is to make ClawPark behave more like a real CryptoKitties-style product where users can:
+- publish their own Claws,
+- browse and evaluate listings,
+- buy and own specimens,
+- breed owned specimens,
+- list offspring back into the marketplace.
 
 ---
 
-## Phase 1 — Real ownership and inventory
-- [ ] Add a first-class `owners` / `inventory` model in SQLite
-- [ ] Distinguish between:
+## Today's action item
+
+### Goal for today
+- Build shared understanding of the product gap between the current prototype and the real market loop.
+- Split the work clearly between **Frontend** and **Backend** so the team can execute in parallel.
+- Keep the current prototype stable while defining the next production milestone.
+
+### What is already true today
+- Claw gallery, breeding, reveal, doctrine, and lineage exist.
+- The marketplace exists with SQLite-backed listings.
+- Verified Claw publish exists through Discord-authenticated web flow.
+- Unverified local-skill publish exists for Claws and Skills.
+- Local example bundles exist and seed marketplace data is wired to them.
+- Claw detail inspection from the gallery now exists.
+
+### What is not true yet
+- Users do not really own or transfer Claws in a persistent commerce model.
+- Listings are not yet a real for-sale inventory system.
+- Buying, selling, delisting, and transfer are not implemented.
+- Breeding is not yet tied to ownership and breeding availability rules.
+
+---
+
+## Team split
+
+# Backend Team TODO
+
+## 1. Ownership and inventory
+- [ ] Add a first-class ownership model in SQLite.
+- [ ] Add inventory records for each user.
+- [ ] Distinguish clearly between:
   - [ ] published listing
   - [ ] owned specimen
-  - [ ] claimed local copy
-- [ ] Decide whether ownership is app-native only or wallet/on-chain backed
-- [ ] Add listing states:
+  - [ ] local claimed/imported copy
+- [ ] Add Claw ownership transfer logic.
+- [ ] Persist child ownership at birth.
+
+## 2. Marketplace sale model
+- [ ] Add listing sale states:
   - [ ] draft
   - [ ] published
   - [ ] reserved
   - [ ] sold
   - [ ] delisted
-- [ ] Track who currently owns each Claw
-- [ ] Track whether a listed Claw is still eligible for breeding
+- [ ] Add fixed-price listing fields first.
+- [ ] Add purchase transaction endpoint.
+- [ ] Transfer ownership on successful purchase.
+- [ ] Prevent double-purchase and stale sale races.
+- [ ] Record sale history and provenance.
 
-## Phase 2 — Selling and buying
-- [ ] Add seller-side listing creation for owned Claws
-- [ ] Add price fields and sale metadata
-- [ ] Support fixed-price sales first
-- [ ] Add buyer-side purchase flow
-- [ ] Transfer ownership after successful purchase
-- [ ] Prevent duplicate purchase / stale inventory races
-- [ ] Show listing history: created, price changed, sold, transferred
-- [ ] Add seller receipts and buyer receipts
-
-## Phase 3 — CryptoKitties-style breeding rules
-- [ ] Restrict breeding to Claws the user owns or is explicitly allowed to use
-- [ ] Add breeding eligibility state per Claw
-- [ ] Add cooldown / recovery model after breeding
-- [ ] Add parent usage counters and breeding history
-- [ ] Prevent invalid pairings:
+## 3. Breeding rules tied to ownership
+- [ ] Restrict breeding to owned or explicitly permitted Claws.
+- [ ] Add breeding eligibility state per Claw.
+- [ ] Add cooldown / recovery rules after breeding.
+- [ ] Track breeding count and parent usage history.
+- [ ] Reject invalid pairings:
   - [ ] self-breeding
-  - [ ] unavailable / sold / delisted parent
+  - [ ] unavailable parent
+  - [ ] sold parent
+  - [ ] delisted parent
   - [ ] blocked lineage combinations if needed
-- [ ] Persist child ownership at birth
-- [ ] Let newborn Claws enter inventory automatically
-- [ ] Allow the owner to list newborn Claws for sale
+- [ ] Automatically place newborn Claws into owner inventory.
 
-## Phase 4 — Marketplace UX that feels like a product, not a demo
-- [ ] Add Claw detail pages with:
-  - [ ] seller
+## 4. Publish trust and security
+- [ ] Replace public unsigned publishing with authenticated publisher-token flow for production.
+- [ ] Keep unsigned publishing only for local/dev/demo if needed.
+- [ ] Add rate limiting for publish and purchase endpoints.
+- [ ] Harden bundle validation and file scanning.
+- [ ] Add audit logs for publish, delist, buy, transfer, and breed actions.
+- [ ] Add moderation/quarantine hooks for suspicious listings.
+
+## 5. Persistence and ops
+- [ ] Replace ad hoc SQLite schema changes with real migrations.
+- [ ] Add durable backup/restore strategy.
+- [ ] Decide when to move from SQLite to Postgres.
+- [ ] Move artifact storage from local disk if multi-host deployment is needed.
+- [ ] Add monitoring, metrics, and request logging.
+
+---
+
+# Frontend Team TODO
+
+## 1. Marketplace browsing and listing detail
+- [ ] Add full Claw detail pages for marketplace listings.
+- [ ] Show:
   - [ ] owner
-  - [ ] status
+  - [ ] seller
+  - [ ] listing status
   - [ ] price
+  - [ ] generation
   - [ ] lineage
   - [ ] breeding availability
-- [ ] Add seller profile / stable page
-- [ ] Add portfolio page for "My Claws"
-- [ ] Add listing management actions:
-  - [ ] publish
+- [ ] Add dedicated skill detail pages.
+- [ ] Make listing detail pages feel like collectible specimen pages, not raw admin cards.
+
+## 2. Seller and buyer UX
+- [ ] Add a **My Claws** / portfolio page.
+- [ ] Add seller listing management UI:
+  - [ ] list for sale
   - [ ] edit price
   - [ ] delist
   - [ ] relist
-- [ ] Add browse controls:
-  - [ ] sort by newest
-  - [ ] sort by price
-  - [ ] sort by generation
-  - [ ] filter by archetype / soul / skill
-- [ ] Add transaction feedback and empty states
-- [ ] Add mobile treatment for Claw detail, listing, and purchase flow
+- [ ] Add buyer purchase flow UI.
+- [ ] Add purchase confirmation, loading, and failure states.
+- [ ] Add seller receipt and buyer receipt views.
 
-## Phase 5 — Trust, security, and moderation
-- [ ] Remove or heavily restrict unsigned public publish in shared production mode
-- [ ] Add authenticated publisher tokens for local skill publishing
-- [ ] Add rate limiting for publish / purchase endpoints
-- [ ] Add file scanning / stricter validation for uploaded bundles
-- [ ] Add audit logs for publish, delist, purchase, and breed actions
-- [ ] Add admin moderation controls for abusive or fake listings
-- [ ] Add soft-delete / quarantine for suspicious uploads
+## 3. Browse controls and discovery
+- [ ] Add sorting:
+  - [ ] newest
+  - [ ] price
+  - [ ] generation
+  - [ ] rarity if supported later
+- [ ] Add filters:
+  - [ ] archetype
+  - [ ] soul traits
+  - [ ] skills
+  - [ ] generation
+  - [ ] listing status
+- [ ] Add search by name / slug.
+- [ ] Add favorites / watchlist if time allows.
 
-## Phase 6 — Economics and advanced marketplace behavior
-- [ ] Decide economic model:
-  - [ ] fixed price only
-  - [ ] offer / bid system
-  - [ ] timed auctions
-- [ ] Add marketplace fees / revenue split rules if needed
-- [ ] Add rarity / provenance signals
-- [ ] Add generation-based pricing hints
-- [ ] Add demand signals (watchlist, favorites, recent sales)
-- [ ] Add sale analytics for sellers
+## 4. Breeding UX for owned specimens
+- [ ] Make owned vs unowned status visible in the gallery and marketplace.
+- [ ] Show whether a Claw is breedable right now.
+- [ ] Add cooldown indicators in UI.
+- [ ] Add clear feedback when breeding is blocked.
+- [ ] Add newborn inventory placement and next-step CTAs.
+- [ ] Add “list this child for sale” action after birth/save flow.
 
-## Phase 7 — Production infrastructure
-- [ ] Move bundle storage from local disk to durable object storage if needed
-- [ ] Add real session / auth hardening
-- [ ] Add background jobs for previews, cleanup, and reprocessing
-- [ ] Add DB migrations instead of ad hoc schema evolution
-- [ ] Add observability:
-  - [ ] request logs
-  - [ ] error monitoring
-  - [ ] metrics
-- [ ] Add backup / restore strategy for SQLite or move to Postgres when needed
+## 5. Product polish
+- [ ] Unify gallery detail dossier and marketplace detail experience.
+- [ ] Improve mobile behavior for listing detail, purchase, and breed flows.
+- [ ] Add empty states for no listings / no owned Claws / no eligible parents.
+- [ ] Add clearer transaction and ownership feedback across the app.
 
-## Phase 8 — QA and release readiness
+---
+
+# Shared / Integration TODO
+
+## 1. Contract alignment
+- [ ] Lock backend listing/ownership schema before building full seller UI.
+- [ ] Define one shared source of truth for:
+  - [ ] ownership
+  - [ ] sale status
+  - [ ] breeding eligibility
+  - [ ] transaction history
+- [ ] Add explicit frontend/backend contracts for listing detail and purchase APIs.
+
+## 2. Test coverage
 - [ ] Add end-to-end tests for:
-  - [ ] publish
-  - [ ] list for sale
-  - [ ] buy
+  - [ ] publish a Claw
+  - [ ] list a Claw for sale
+  - [ ] buy a Claw
+  - [ ] transfer ownership
   - [ ] breed owned Claws
-  - [ ] relist child Claw
-- [ ] Add regression tests for inventory transfer and race conditions
-- [ ] Add visual QA for marketplace detail pages
-- [ ] Add manual test checklist for seller and buyer flows
-- [ ] Run a full demo script from publish → sale → breed → relist
+  - [ ] list child Claw for sale
+- [ ] Add race-condition regression tests for purchase and inventory transfer.
+- [ ] Add visual QA checks for listing detail and seller flows.
+
+## 3. Demo readiness
+- [ ] Build one clean demo path:
+  - [ ] publish
+  - [ ] browse
+  - [ ] buy
+  - [ ] breed
+  - [ ] relist child
+- [ ] Prepare a seeded demo dataset that shows parent → sale → child → resale lifecycle.
 
 ---
 
-## Recommended build order
+## Suggested next milestone
 
-### Best next 5 tasks
-1. [ ] Add SQLite ownership + inventory tables
-2. [ ] Add fixed-price listing + purchase flow
+### Best next backend tasks
+1. [ ] Add ownership + inventory tables
+2. [ ] Add fixed-price listing + purchase endpoints
 3. [ ] Tie breeding eligibility to owned inventory
-4. [ ] Create a "My Claws" seller dashboard
-5. [ ] Replace unsigned public publish with authenticated publisher-token flow
+4. [ ] Add transaction history / provenance records
+5. [ ] Replace unsigned public publishing with publisher-token auth
 
-### After that
-6. [ ] Add cooldowns and parent availability rules
-7. [ ] Add listing detail page with price + lineage + owner info
-8. [ ] Add search/filter/sort for marketplace browse
-9. [ ] Add receipts / sale history / provenance
-10. [ ] Add end-to-end tests for the full market loop
+### Best next frontend tasks
+1. [ ] Build My Claws / seller portfolio page
+2. [ ] Build marketplace Claw detail page with price + owner + lineage
+3. [ ] Add buy flow UI and receipts
+4. [ ] Show breeding eligibility/cooldown in the gallery
+5. [ ] Add post-birth “list this child” seller flow
 
 ---
 
-## Product definition of done for the "CryptoKitties-like" milestone
+## Definition of done for the CryptoKitties-like milestone
 - [ ] A user can publish their own Claw
 - [ ] Another user can buy that Claw
-- [ ] Ownership transfers correctly
-- [ ] Owned Claws can be bred under valid rules
-- [ ] The child is minted into the owner inventory
-- [ ] The child can be listed for sale again
-- [ ] All state survives refresh / restart
-- [ ] The marketplace is safe enough for public use
+- [ ] Ownership transfers correctly and persists
+- [ ] Owned Claws can breed under valid rules
+- [ ] The child is added to the owner inventory
+- [ ] The child can be listed again for sale
+- [ ] Listing, ownership, and breeding state survives refresh/restart
+- [ ] The marketplace is safe enough to expose to real users
