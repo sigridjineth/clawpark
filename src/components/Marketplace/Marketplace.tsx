@@ -13,6 +13,8 @@ import {
   getDiscordAuthUrl,
   getMarketplaceListings,
   getMarketplaceSession,
+  installMarketplaceSkill,
+  MarketplaceApiError,
   publishMarketplaceDraft,
   updateMarketplaceDraft,
 } from '../../services/marketplaceApi';
@@ -71,6 +73,8 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
   const [toolsVisibility, setToolsVisibility] = useState<'full' | 'summary'>('full');
   const [coverStyle, setCoverStyle] = useState<'avatar' | 'containment-card'>('avatar');
   const [busy, setBusy] = useState(false);
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null);
+  const [overwriteInstallSlug, setOverwriteInstallSlug] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +214,32 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
     }
   };
 
+  const handleInstallListing = async (listing: MarketplaceSkillListing, overwrite = false) => {
+    setInstallingSlug(listing.slug);
+    try {
+      const result = await installMarketplaceSkill(listing.slug, overwrite);
+      setOverwriteInstallSlug((current) => (current === listing.slug ? null : current));
+      setStatusMessage(
+        `${result.overwritten ? 'Overwrote' : 'Installed'} ${listing.title} into ${result.installedPath}.`,
+      );
+    } catch (error) {
+      if (error instanceof MarketplaceApiError && error.status === 409) {
+        setOverwriteInstallSlug(listing.slug);
+        setStatusMessage(error.message);
+        return;
+      }
+
+      setOverwriteInstallSlug((current) => (current === listing.slug ? null : current));
+      setStatusMessage(
+        error instanceof Error
+          ? `${error.message} Download the bundle or copy install steps instead.`
+          : 'Failed to install skill. Download the bundle or copy install steps instead.',
+      );
+    } finally {
+      setInstallingSlug(null);
+    }
+  };
+
   const marketplaceOrigin = window.location.origin;
 
   return (
@@ -299,6 +329,15 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                       </div>
 
                       <div className="mt-auto flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleInstallListing(listing)}
+                          className="jp-btn flex-1 text-xs"
+                          disabled={installingSlug === listing.slug}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {installingSlug === listing.slug ? 'Installing…' : 'Install here'}
+                        </button>
                         <button type="button" onClick={() => void handleDownloadListing(listing)} className="jp-btn flex-1 text-xs" disabled={!listing.bundleDownloadUrl}>
                           <Download className="h-3.5 w-3.5" />
                           Download Skill
@@ -306,6 +345,16 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                         <button type="button" onClick={() => void handleCopyInstallHint(listing)} className="jp-btn-secondary flex-1 text-xs">
                           Copy install steps
                         </button>
+                        {overwriteInstallSlug === listing.slug && (
+                          <button
+                            type="button"
+                            onClick={() => void handleInstallListing(listing, true)}
+                            className="jp-btn-secondary flex-1 text-xs"
+                            disabled={installingSlug === listing.slug}
+                          >
+                            Overwrite install
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -378,7 +427,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
             </p>
             <ul className="space-y-2">
               <li>• Claw listings can be claimed into the gallery.</li>
-              <li>• Skill listings download as installable skill bundles.</li>
+              <li>• Skill listings can install directly into the local OpenClaw skills directory when the marketplace API is running on this machine.</li>
               <li>• Unsigned local-skill publish never overwrites an existing listing.</li>
             </ul>
           </aside>

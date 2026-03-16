@@ -38,7 +38,7 @@ Each Claw is modeled across four dimensions:
 ### 2. Skill listings
 - source: standalone skill ZIP rooted at `SKILL.md`
 - output: sanitized installable skill ZIP
-- can be downloaded into an OpenClaw skills directory
+- can be downloaded or installed into an OpenClaw skills directory
 
 ## Trust model
 
@@ -94,6 +94,24 @@ python3 ~/.agents/skills/marketplace-publisher/publish_marketplace.py skill /pat
 
 The local skill publisher writes unverified marketplace listings for shared browsing.
 
+## Marketplace skill install flow
+
+When the ClawPark marketplace API is running on the same machine as your OpenClaw workspace, skill listings can install directly into the configured skills directory.
+
+Default target:
+
+```bash
+~/.agents/skills/<slug>
+```
+
+Optional override:
+
+```bash
+export MARKETPLACE_SKILL_INSTALL_DIR="/path/to/openclaw/skills"
+```
+
+The Marketplace UI keeps the existing download + copy-install-steps fallback, and the server refuses to overwrite an existing installed skill unless you explicitly confirm an overwrite install.
+
 ## Local development
 
 ### Full local development
@@ -103,6 +121,7 @@ export MARKETPLACE_SESSION_SECRET="change-me"
 export DISCORD_CLIENT_ID="..."
 export DISCORD_CLIENT_SECRET="..."
 export DISCORD_REDIRECT_URI="http://localhost:8787/api/auth/discord/callback"
+# optional: export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.agents/skills"
 npm run dev
 ```
 

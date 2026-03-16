@@ -190,10 +190,16 @@ Rules:
 - `GET /api/marketplace/listings`
 - `GET /api/marketplace/listings/:slug`
 - `GET /api/marketplace/listings/:slug/bundle`
+- `POST /api/marketplace/listings/:slug/install`
 
 Bundle behavior:
 - Claw listing → JSON bundle
 - Skill listing → ZIP bundle
+
+Install behavior:
+- Skill listing install target defaults to `~/.agents/skills/<slug>`
+- `MARKETPLACE_SKILL_INSTALL_DIR` can override the local install root
+- install is safe by default and returns a conflict until overwrite is explicitly requested
 
 ---
 
