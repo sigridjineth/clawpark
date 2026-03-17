@@ -85,7 +85,7 @@ const skillListing = {
   currentVersion: { version: 1, publishedAt: '2026-03-10T00:00:00.000Z' },
   bundleDownloadUrl: '/api/marketplace/listings/park-audit-skill/bundle',
   claimable: false as const,
-  installHint: 'Install into ~/.agents/skills/park-audit',
+  installHint: 'Install into ./skills/park-audit',
 };
 
 describe('marketplace publish flow contracts', () => {
@@ -100,6 +100,15 @@ describe('marketplace publish flow contracts', () => {
         }
         if (url.endsWith('/api/marketplace/listings')) {
           return new Response(JSON.stringify([clawListing, skillListing]), { status: 200 });
+        }
+        if (url.includes('/api/marketplace/listings/park-audit-skill/install')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            slug: 'park-audit-skill',
+            skillSlug: 'park-audit',
+            installedPath: '/tmp/openclaw-skills/park-audit',
+            overwritten: false,
+          }), { status: 200 });
         }
         if (url.includes('/api/marketplace/listings/sage-demo/bundle')) {
           return new Response(JSON.stringify({ kind: 'claw', claw: clawListing.claw, manifest: clawListing.manifest }), { status: 200 });
@@ -129,7 +138,14 @@ describe('marketplace publish flow contracts', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Park Audit/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Install here/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Copy install steps/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Install here/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Installed Park Audit into \/tmp\/openclaw-skills\/park-audit\./i)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: /^Publish$/i }));

@@ -38,7 +38,7 @@ Each Claw is modeled across four dimensions:
 ### 2. Skill listings
 - source: standalone skill ZIP rooted at `SKILL.md`
 - output: sanitized installable skill ZIP
-- can be downloaded into an OpenClaw skills directory
+- can be downloaded or installed into an OpenClaw skills directory
 
 ## Trust model
 
@@ -77,22 +77,41 @@ Each Claw is modeled across four dimensions:
 Install the local publisher skill:
 
 ```bash
-cp -R integrations/openclaw-marketplace-publisher ~/.agents/skills/marketplace-publisher
+cp -R integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
 export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
+# shared fallback: cp -R integrations/openclaw-marketplace-publisher ~/.openclaw/skills/marketplace-publisher
 ```
 
 ### Publish the current Claw workspace
 ```bash
 cd /path/to/openclaw-workspace
-python3 ~/.agents/skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
+python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
 ```
 
 ### Publish a standalone skill
 ```bash
-python3 ~/.agents/skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
+python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
 ```
 
 The local skill publisher writes unverified marketplace listings for shared browsing.
+
+## Marketplace skill install flow
+
+When the ClawPark marketplace API is running on the same machine as your OpenClaw workspace, skill listings can install directly into the configured skills directory.
+
+Default target:
+
+```bash
+./skills/<slug>
+```
+
+Optional shared install target:
+
+```bash
+export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
+```
+
+The Marketplace UI keeps the existing download + copy-install-steps fallback, and the server refuses to overwrite an existing installed skill unless you explicitly confirm an overwrite install.
 
 ## Local development
 
@@ -103,6 +122,7 @@ export MARKETPLACE_SESSION_SECRET="change-me"
 export DISCORD_CLIENT_ID="..."
 export DISCORD_CLIENT_SECRET="..."
 export DISCORD_REDIRECT_URI="http://localhost:8787/api/auth/discord/callback"
+# optional shared install: export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
 npm run dev
 ```
 
