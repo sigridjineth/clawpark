@@ -197,8 +197,8 @@ Bundle behavior:
 - Skill listing → ZIP bundle
 
 Install behavior:
-- Skill listing install target defaults to `~/.agents/skills/<slug>`
-- `MARKETPLACE_SKILL_INSTALL_DIR` can override the local install root
+- Skill listing install target defaults to `./skills/<slug>` in the active OpenClaw workspace
+- `MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"` switches the install root to the shared OpenClaw skills directory
 - install is safe by default and returns a conflict until overwrite is explicitly requested
 
 ---

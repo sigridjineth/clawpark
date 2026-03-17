@@ -85,7 +85,7 @@ const skillListing = {
   currentVersion: { version: 1, publishedAt: '2026-03-10T00:00:00.000Z' },
   bundleDownloadUrl: '/api/marketplace/listings/park-audit-skill/bundle',
   claimable: false as const,
-  installHint: 'Install into ~/.agents/skills/park-audit',
+  installHint: 'Install into ./skills/park-audit',
 };
 
 describe('marketplace publish flow contracts', () => {

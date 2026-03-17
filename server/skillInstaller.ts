@@ -21,6 +21,10 @@ export function resolveSkillInstallRoot(path: string, cwd = process.cwd()) {
 
 function displayPath(path: string) {
   const home = homedir();
+  const cwdSkills = resolve(process.cwd(), 'skills');
+  if (path === cwdSkills || path.startsWith(`${cwdSkills}/`)) {
+    return path.replace(cwdSkills, './skills');
+  }
   return path === home || path.startsWith(`${home}/`) ? path.replace(home, '~') : path;
 }
 

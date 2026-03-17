@@ -46,10 +46,15 @@ function publisherLabel(listing: MarketplaceListing) {
     : listing.publisher.displayName;
 }
 
+function installTargetPath(skill: MarketplaceSkillListing) {
+  return skill.installHint.replace(/^Install into\s+/i, '').trim() || `./skills/${skill.skill.slug}`;
+}
+
 function localSkillSnippet(skill: MarketplaceSkillListing) {
+  const target = installTargetPath(skill);
   return [
-    `mkdir -p ~/.agents/skills/${skill.skill.slug}`,
-    `unzip ${skill.slug}.skill.zip -d ~/.agents/skills/${skill.skill.slug}`,
+    `mkdir -p ${target}`,
+    `unzip ${skill.slug}.skill.zip -d ${target}`,
   ].join('\n');
 }
 
@@ -551,7 +556,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
 
             <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
               <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Install</div>
-              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-bone">cp -R integrations/openclaw-marketplace-publisher ~/.agents/skills/marketplace-publisher</pre>
+              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-bone">cp -R integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher{'\n'}# shared fallback: ~/.openclaw/skills/marketplace-publisher</pre>
             </div>
 
             <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">

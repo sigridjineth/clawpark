@@ -1,4 +1,3 @@
-import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { resolveSkillInstallRoot } from './skillInstaller.ts';
 
@@ -27,11 +26,15 @@ export function loadConfig(overrides: Partial<MarketplaceServerConfig> = {}): Ma
   const cwd = process.cwd();
   const storageDir = overrides.storageDir ?? resolve(cwd, process.env.MARKETPLACE_STORAGE_DIR ?? 'marketplace-data');
   const publicOrigin = overrides.publicOrigin ?? required(process.env.MARKETPLACE_PUBLIC_ORIGIN, 'http://localhost:8787');
+  const openClawWorkspace = resolveSkillInstallRoot(
+    process.env.MARKETPLACE_OPENCLAW_WORKSPACE ?? process.env.OPENCLAW_WORKSPACE ?? cwd,
+    cwd,
+  );
   const skillInstallRoot = resolveSkillInstallRoot(
     overrides.skillInstallRoot ??
       process.env.MARKETPLACE_SKILL_INSTALL_DIR ??
       process.env.OPENCLAW_SKILLS_DIR ??
-      `${homedir()}/.agents/skills`,
+      resolve(openClawWorkspace, 'skills'),
     cwd,
   );
 
