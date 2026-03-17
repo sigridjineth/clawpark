@@ -335,6 +335,18 @@ npm run dev
 
 `npm run dev` now starts both the Vite frontend and the SQLite marketplace server together.
 
+When the server is running, API documentation is available at:
+
+```text
+http://localhost:8787/api/docs
+```
+
+The raw OpenAPI document is served at:
+
+```text
+http://localhost:8787/api/openapi.json
+```
+
 ### Frontend only
 ```bash
 npm run dev:web

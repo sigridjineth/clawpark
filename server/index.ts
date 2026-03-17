@@ -8,6 +8,7 @@ import { loadConfig, isDiscordAuthConfigured, type MarketplaceServerConfig } fro
 import { createDiscordAuthUrl, exchangeDiscordCode, fetchDiscordUser } from './discord.ts';
 import { methodNotAllowed, notFound, readJson, readMultipartForm, redirect, sendError, sendJson } from './http.ts';
 import { createMarketplaceStore } from './marketplaceStore.ts';
+import { buildApiDocsHtml, buildOpenApiSpec } from './openapi.ts';
 import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from './openclawParser.ts';
 import { formatSkillInstallHint, installMarketplaceSkillBundle, SkillInstallConflictError } from './skillInstaller.ts';
 import {
@@ -103,6 +104,19 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
 
       const url = new URL(req.url, config.publicOrigin);
       const pathname = cleanPathname(url.pathname);
+
+      if (pathname === '/api/openapi.json') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        sendJson(res, 200, buildOpenApiSpec(config));
+        return;
+      }
+
+      if (pathname === '/api/docs') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(buildApiDocsHtml('/api/openapi.json'));
+        return;
+      }
 
       if (pathname === '/api/auth/session') {
         if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);

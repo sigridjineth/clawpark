@@ -35,10 +35,12 @@ export function formatSkillInstallHint(path: string, skillSlug: string) {
 export class SkillInstallConflictError extends Error {
   code = 'skill_install_exists';
   overwriteRequired = true;
+  readonly installedPath: string;
 
-  constructor(readonly installedPath: string) {
+  constructor(installedPath: string) {
     super(`Skill already exists at ${installedPath}. Re-run with overwrite enabled to replace it.`);
     this.name = 'SkillInstallConflictError';
+    this.installedPath = installedPath;
   }
 }
 

@@ -400,6 +400,7 @@ After deployment, verify in this order:
 ### App and API
 - `https://clawpark-dev.example.com/` loads
 - `https://clawpark-dev.example.com/api/auth/session` returns JSON
+- `https://clawpark-dev.example.com/api/docs` loads the OpenAPI / Swagger-style docs
 - Marketplace browse works
 
 ### Publish / bundle flows
@@ -575,4 +576,3 @@ Official references used for this guide:
   - https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/
 - Cloudflare Access for self-hosted apps:
   - https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/
-

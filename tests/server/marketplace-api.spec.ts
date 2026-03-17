@@ -155,6 +155,29 @@ describe('marketplace API', () => {
     }
   });
 
+  it('serves swagger-like OpenAPI docs for the marketplace server', async () => {
+    const specResponse = await fetch(`${baseUrl}/api/openapi.json`);
+    expect(specResponse.status).toBe(200);
+    expect(specResponse.headers.get('content-type')).toContain('application/json');
+    const spec = (await specResponse.json()) as {
+      openapi: string;
+      info: { title: string };
+      paths: Record<string, unknown>;
+    };
+    expect(spec.openapi).toBe('3.1.0');
+    expect(spec.info.title).toContain('ClawPark');
+    expect(spec.paths['/api/docs']).toBeTruthy();
+    expect(spec.paths['/api/marketplace/listings/{slug}/install']).toBeTruthy();
+
+    const docsResponse = await fetch(`${baseUrl}/api/docs`);
+    expect(docsResponse.status).toBe(200);
+    expect(docsResponse.headers.get('content-type')).toContain('text/html');
+    const docsHtml = await docsResponse.text();
+    expect(docsHtml).toContain('ClawPark API Docs');
+    expect(docsHtml).toContain('/api/openapi.json');
+    expect(docsHtml).toContain('redoc');
+  });
+
   it('installs a marketplace skill bundle into the configured skills directory without overwriting by default', async () => {
     const skillZip = createWorkspaceZip({
       'park-audit/SKILL.md': '---\nname: Park Audit\ndescription: Scan the enclosure for failures.\n---\nReview the current park state and challenge weak assumptions.\n',
