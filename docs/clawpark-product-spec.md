@@ -103,6 +103,7 @@ It currently supports:
   - browse,
   - inspect,
   - download skill ZIP,
+  - install directly into the local OpenClaw skills directory when the marketplace API is local,
   - copy install instructions.
 
 ---
@@ -137,7 +138,7 @@ The interface should always answer:
 #### Skill listing
 - source: standalone skill bundle rooted at `SKILL.md`
 - content: sanitized installable skill ZIP
-- actions: browse, download, install externally
+- actions: browse, download, local install, install externally
 
 ### Trust states
 #### Verified

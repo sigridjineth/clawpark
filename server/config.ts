@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { resolveSkillInstallRoot } from './skillInstaller.ts';
 
 export interface MarketplaceServerConfig {
   host: string;
@@ -12,6 +13,7 @@ export interface MarketplaceServerConfig {
   discordClientId: string;
   discordClientSecret: string;
   discordRedirectUri: string;
+  skillInstallRoot: string;
   serveDist: boolean;
   distDir: string;
 }
@@ -24,6 +26,17 @@ export function loadConfig(overrides: Partial<MarketplaceServerConfig> = {}): Ma
   const cwd = process.cwd();
   const storageDir = overrides.storageDir ?? resolve(cwd, process.env.MARKETPLACE_STORAGE_DIR ?? 'marketplace-data');
   const publicOrigin = overrides.publicOrigin ?? required(process.env.MARKETPLACE_PUBLIC_ORIGIN, 'http://localhost:8787');
+  const openClawWorkspace = resolveSkillInstallRoot(
+    process.env.MARKETPLACE_OPENCLAW_WORKSPACE ?? process.env.OPENCLAW_WORKSPACE ?? cwd,
+    cwd,
+  );
+  const skillInstallRoot = resolveSkillInstallRoot(
+    overrides.skillInstallRoot ??
+      process.env.MARKETPLACE_SKILL_INSTALL_DIR ??
+      process.env.OPENCLAW_SKILLS_DIR ??
+      resolve(openClawWorkspace, 'skills'),
+    cwd,
+  );
 
   return {
     host: overrides.host ?? process.env.MARKETPLACE_HOST ?? '0.0.0.0',
@@ -38,6 +51,7 @@ export function loadConfig(overrides: Partial<MarketplaceServerConfig> = {}): Ma
     discordClientSecret: overrides.discordClientSecret ?? required(process.env.DISCORD_CLIENT_SECRET),
     discordRedirectUri:
       overrides.discordRedirectUri ?? required(process.env.DISCORD_REDIRECT_URI, `${publicOrigin}/api/auth/discord/callback`),
+    skillInstallRoot,
     serveDist: overrides.serveDist ?? process.env.MARKETPLACE_SERVE_DIST !== '0',
     distDir: overrides.distDir ?? resolve(cwd, 'dist'),
   };

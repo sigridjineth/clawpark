@@ -123,3 +123,11 @@ export interface MarketplaceSession {
   user: MarketplacePublisher | null;
   authConfigured: boolean;
 }
+
+export interface MarketplaceSkillInstallResult {
+  ok: true;
+  slug: string;
+  skillSlug: string;
+  installedPath: string;
+  overwritten: boolean;
+}

@@ -177,7 +177,7 @@ const seedSkills: Array<{
     slug: 'park-audit-demo',
     publisherId: 'seed-skill-publisher-park-audit',
     publisherName: 'Local Park Audit Publisher',
-    installHint: 'Install into ~/.agents/skills/park-audit',
+    installHint: 'Install into ./skills/park-audit',
     fixturePath: MARKETPLACE_SEED_FIXTURES.parkAuditSkill,
     skill: {
       slug: 'park-audit',
@@ -195,7 +195,7 @@ const seedSkills: Array<{
     slug: 'containment-launch-demo',
     publisherId: 'seed-skill-publisher-containment-launch',
     publisherName: 'Local Containment Publisher',
-    installHint: 'Install into ~/.agents/skills/containment-launch',
+    installHint: 'Install into ./skills/containment-launch',
     fixturePath: MARKETPLACE_SEED_FIXTURES.containmentLaunchSkill,
     skill: {
       slug: 'containment-launch',

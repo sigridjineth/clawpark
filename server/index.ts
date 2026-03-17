@@ -9,6 +9,7 @@ import { createDiscordAuthUrl, exchangeDiscordCode, fetchDiscordUser } from './d
 import { methodNotAllowed, notFound, readJson, readMultipartForm, redirect, sendError, sendJson } from './http.ts';
 import { createMarketplaceStore } from './marketplaceStore.ts';
 import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from './openclawParser.ts';
+import { formatSkillInstallHint, installMarketplaceSkillBundle, SkillInstallConflictError } from './skillInstaller.ts';
 import {
   buildOauthStateCookie,
   buildSessionCookie,
@@ -243,7 +244,7 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
               kind: 'skill',
               value: parsed.skill,
               manifest: parsed.manifest,
-              installHint: `Install into ~/.agents/skills/${parsed.skill.slug}`,
+              installHint: formatSkillInstallHint(config.skillInstallRoot, parsed.skill.slug),
             },
           });
           sendJson(res, 201, listing);
@@ -310,6 +311,41 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
           'Content-Disposition': `attachment; filename="${artifact.filename}"`,
         });
         res.end(contents);
+        return;
+      }
+
+      const installMatch = pathname.match(/^\/api\/marketplace\/listings\/([^/]+)\/install$/);
+      if (installMatch) {
+        if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+        const slug = decodeURIComponent(installMatch[1]);
+        const payload = await readJson<{ overwrite?: boolean }>(req);
+        const listing = store.getListingBySlug(slug);
+        if (!listing) return sendError(res, 404, 'Listing not found.');
+        if (listing.kind !== 'skill') return sendError(res, 400, 'Only skill listings can be installed.');
+
+        const artifact = store.getListingArtifact(slug);
+        if (!artifact) return sendError(res, 404, 'Listing bundle not found.');
+
+        try {
+          const result = await installMarketplaceSkillBundle({
+            zipPath: artifact.path,
+            skillSlug: listing.skill.slug,
+            installRoot: config.skillInstallRoot,
+            overwrite: payload.overwrite,
+          });
+          sendJson(res, 200, { ok: true, slug, skillSlug: listing.skill.slug, ...result });
+        } catch (error) {
+          if (error instanceof SkillInstallConflictError) {
+            sendJson(res, 409, {
+              error: error.message,
+              code: error.code,
+              installedPath: error.installedPath,
+              overwriteRequired: error.overwriteRequired,
+            });
+            return;
+          }
+          throw error;
+        }
         return;
       }
 
