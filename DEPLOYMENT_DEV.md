@@ -481,7 +481,89 @@ That sequence minimizes the number of moving parts you debug at once.
 
 ---
 
-## 17. References
+## 17. Discord bot checklist for an OpenClaw Claw
+
+Use this checklist when you want a Claw running on the same machine to talk in Discord and publish into ClawPark locally.
+
+### Discord Developer Portal
+- create a Discord application
+- add a bot user
+- copy the bot token
+- enable **Message Content Intent**
+- enable **Server Members Intent** if your OpenClaw setup expects richer guild visibility
+- invite the bot with at least:
+  - View Channels
+  - Send Messages
+  - Read Message History
+  - Embed Links
+  - Attach Files
+
+### OpenClaw channel config
+Recommended secure baseline:
+- keep DMs in **pairing** mode
+- keep guild access on **allowlist**
+- start with one private server and one test channel
+- require mention at first
+
+Official references:
+- https://docs.openclaw.ai/channels/discord
+- https://docs.openclaw.ai/channels/pairing
+- https://docs.openclaw.ai/providers/discord
+
+### Workspace skill install
+Install the ClawPark publisher skill into the same OpenClaw workspace that the Discord-connected Claw uses:
+
+```bash
+cd /opt/openclaw-workspace
+mkdir -p ./skills
+cp -R /opt/clawpark/integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
+```
+
+### Gateway environment
+Example:
+
+```bash
+cat > /opt/openclaw-workspace/.env.gateway <<'EOF'
+DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
+CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
+OPENCLAW_WORKSPACE=/opt/openclaw-workspace
+EOF
+```
+
+### Gateway service checks
+After starting the gateway:
+
+```bash
+sudo systemctl status openclaw-gateway
+journalctl -u openclaw-gateway -f
+```
+
+### Pairing checks
+If Discord DMs start in pairing mode:
+
+```bash
+openclaw pairing list discord
+openclaw pairing approve discord <CODE>
+```
+
+### Local publish smoke test
+Before relying on Discord-driven publishing, validate the path manually:
+
+```bash
+cd /opt/openclaw-workspace
+export CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
+python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
+```
+
+### Operational recommendation
+For this repo's current architecture:
+- let **Discord** handle chat and command routing into OpenClaw
+- let the installed OpenClaw skill call **`http://127.0.0.1:8787`**
+- let **Cloudflare Tunnel** expose ClawPark only for browser/UI access
+
+That keeps the Claw's publish/install flow local, simple, and aligned with the filesystem-based behavior in this codebase.
+
+## 18. References
 
 Official references used for this guide:
 
