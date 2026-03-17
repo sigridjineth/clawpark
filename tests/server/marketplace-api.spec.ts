@@ -175,7 +175,8 @@ describe('marketplace API', () => {
     const docsHtml = await docsResponse.text();
     expect(docsHtml).toContain('ClawPark API Docs');
     expect(docsHtml).toContain('/api/openapi.json');
-    expect(docsHtml).toContain('redoc');
+    expect(docsHtml).toContain('Loading API spec');
+    expect(docsHtml).toContain('fetch(specUrl)');
   });
 
   it('installs a marketplace skill bundle into the configured skills directory without overwriting by default', async () => {
