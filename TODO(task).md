@@ -33,6 +33,69 @@ The goal is to make ClawPark behave more like a real CryptoKitties-style product
 
 ---
 
+## Status update — mock commerce milestone snapshot
+
+This section records what has now been implemented in the repository as a **mock / integration layer**.
+It is intentionally separate from the production roadmap below.
+
+### Completed in the current mock milestone
+
+#### Backend / server
+- [x] Added a stateful in-memory mock commerce layer.
+- [x] Added mock inventory / portfolio endpoints:
+  - [x] `GET /api/me`
+  - [x] `GET /api/me/summary`
+  - [x] `GET /api/my/claws`
+  - [x] `GET /api/my/claws/:specimenId`
+  - [x] `GET /api/my/claws/:specimenId/activity`
+  - [x] `GET /api/my/transactions`
+  - [x] `GET /api/claws/:clawId/provenance`
+- [x] Added mock seller mutation endpoints:
+  - [x] `POST /api/marketplace/listings`
+  - [x] `PATCH /api/marketplace/listings/:slug`
+  - [x] `POST /api/marketplace/listings/:slug/delist`
+  - [x] `POST /api/marketplace/listings/:slug/relist`
+  - [x] `POST /api/marketplace/listings/:slug/purchase`
+- [x] Added mock breeding endpoints:
+  - [x] `GET /api/breeding/eligibility`
+  - [x] `POST /api/breeding/runs`
+- [x] Added `GET /api/marketplace/mock-listings` for mock public commerce browse.
+- [x] Added shared mock commerce types in `src/types/mockCommerce.ts`.
+- [x] Added focused server regression coverage in `tests/server/mock-commerce.spec.ts`.
+
+#### Frontend / integration
+- [x] Extended `src/services/marketplaceApi.ts` with client helpers for the mock commerce endpoints.
+- [x] Extended `src/components/Marketplace/Marketplace.tsx` to include:
+  - [x] `My Claws` / portfolio tab
+  - [x] seller actions
+  - [x] buy flow
+  - [x] transaction feed
+  - [x] specimen inspection / provenance surface
+  - [x] mock breeding panel
+- [x] Kept the existing browse / publish flows working while adding mock commerce UI.
+- [x] Updated `tests/marketplace.contract.spec.ts` to cover the integrated browse + portfolio + seller + buy + breed + publish path.
+
+#### Documentation / planning
+- [x] Added `docs/clawpark-mock-api-scenarios.md`.
+- [x] Captured the current implementation snapshot and next work in `.omx/plans/plan-clawpark-mock-commerce-integration.md`.
+
+### Important limits of the current milestone
+- [ ] Ownership, inventory, and commerce state are still **mock / in-memory**, not durable SQLite production state.
+- [ ] Frontend still combines remote mock inventory and local gallery sync instead of using one fully unified persistent source of truth.
+- [ ] Real auth hardening, race handling, migrations, and production trust controls are still pending.
+
+### Files added / changed for this mock milestone
+- `docs/clawpark-mock-api-scenarios.md`
+- `server/index.ts`
+- `server/mockCommerceStore.ts`
+- `src/types/mockCommerce.ts`
+- `src/services/marketplaceApi.ts`
+- `src/components/Marketplace/Marketplace.tsx`
+- `tests/server/mock-commerce.spec.ts`
+- `tests/marketplace.contract.spec.ts`
+
+---
+
 ## Team split
 
 # Backend Team TODO

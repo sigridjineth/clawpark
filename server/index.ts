@@ -9,6 +9,7 @@ import { createDiscordAuthUrl, exchangeDiscordCode, fetchDiscordUser } from './d
 import { methodNotAllowed, notFound, readJson, readMultipartForm, redirect, sendError, sendJson } from './http.ts';
 import { createMarketplaceStore } from './marketplaceStore.ts';
 import { buildApiDocsHtml, buildOpenApiSpec } from './openapi.ts';
+import { createMockCommerceStore, MockCommerceError } from './mockCommerceStore.ts';
 import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from './openclawParser.ts';
 import { formatSkillInstallHint, installMarketplaceSkillBundle, SkillInstallConflictError } from './skillInstaller.ts';
 import {
@@ -93,6 +94,7 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
   mkdirSync(config.storageDir, { recursive: true });
   const db = createDatabase(config.sqlitePath);
   const store = createMarketplaceStore(db, config.storageDir);
+  const commerceStore = createMockCommerceStore();
   const secureCookies = isSecureCookie(config);
 
   const server = createServer(async (req, res) => {
@@ -104,6 +106,19 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
 
       const url = new URL(req.url, config.publicOrigin);
       const pathname = cleanPathname(url.pathname);
+      const respondWithCommerceError = (error: unknown) => {
+        if (error instanceof MockCommerceError) {
+          sendJson(res, error.status, {
+            error: {
+              code: error.code,
+              message: error.message,
+              details: error.details ?? undefined,
+            },
+          });
+          return true;
+        }
+        return false;
+      };
 
       if (pathname === '/api/openapi.json') {
         if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
@@ -172,6 +187,123 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
       if (pathname === '/api/auth/logout') {
         if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
         sendJson(res, 200, { ok: true }, { 'Set-Cookie': clearSessionCookie(secureCookies) });
+        return;
+      }
+
+      if (pathname === '/api/me') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(res, 200, commerceStore.getMe());
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (pathname === '/api/me/summary') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(res, 200, commerceStore.getSummary());
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (pathname === '/api/my/claws') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(
+            res,
+            200,
+            commerceStore.listMyClaws({
+              inventoryState: url.searchParams.get('inventoryState'),
+              breedable: url.searchParams.get('breedable'),
+              sourceKind: url.searchParams.get('sourceKind'),
+            }),
+          );
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      const specimenActivityMatch = pathname.match(/^\/api\/my\/claws\/([^/]+)\/activity$/);
+      if (specimenActivityMatch) {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          const specimenId = decodeURIComponent(specimenActivityMatch[1]);
+          sendJson(res, 200, commerceStore.getSpecimenActivity(specimenId));
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      const specimenMatch = pathname.match(/^\/api\/my\/claws\/([^/]+)$/);
+      if (specimenMatch) {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(res, 200, commerceStore.getSpecimenDetail(decodeURIComponent(specimenMatch[1])));
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (pathname === '/api/my/transactions') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(res, 200, commerceStore.listTransactions());
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (pathname === '/api/breeding/eligibility') {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        const specimenId = url.searchParams.get('specimenId');
+        if (!specimenId) {
+          sendError(res, 400, 'specimenId is required.');
+          return;
+        }
+        try {
+          sendJson(res, 200, commerceStore.getBreedingEligibility(specimenId));
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      if (pathname === '/api/breeding/runs') {
+        if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+        try {
+          const payload = await readJson<{ parentASpecimenId: string; parentBSpecimenId: string; preferredTraitId?: string; breedPrompt?: string }>(req);
+          sendJson(res, 200, commerceStore.runBreed(payload));
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
+        return;
+      }
+
+      const provenanceMatch = pathname.match(/^\/api\/claws\/([^/]+)\/provenance$/);
+      if (provenanceMatch) {
+        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+        try {
+          sendJson(res, 200, commerceStore.getProvenance(decodeURIComponent(provenanceMatch[1])));
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
         return;
       }
 
@@ -307,10 +439,58 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
         return;
       }
 
-      if (pathname === '/api/marketplace/listings') {
+      if (pathname === '/api/marketplace/mock-listings') {
         if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
-        sendJson(res, 200, store.listListings());
+        try {
+          sendJson(res, 200, commerceStore.listMarketplaceListings());
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
         return;
+      }
+
+      if (pathname === '/api/marketplace/listings') {
+        if (req.method === 'GET') {
+          sendJson(res, 200, store.listListings());
+          return;
+        }
+
+        if (req.method === 'POST') {
+          try {
+            const payload = await readJson<{ specimenId: string; price: { amount: number; currency?: string } }>(req);
+            const listing = commerceStore.createListing(payload);
+            sendJson(res, 201, listing);
+          } catch (error) {
+            if (respondWithCommerceError(error)) return;
+            throw error;
+          }
+          return;
+        }
+
+        return methodNotAllowed(res, ['GET', 'POST']);
+      }
+
+      const listingActionMatch = pathname.match(/^\/api\/marketplace\/listings\/([^/]+)\/(delist|relist|purchase)$/);
+      if (listingActionMatch) {
+        if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+        const slug = decodeURIComponent(listingActionMatch[1]);
+        const action = listingActionMatch[2];
+        try {
+          if (action === 'delist') {
+            sendJson(res, 200, commerceStore.delistListing(slug));
+            return;
+          }
+          if (action === 'relist') {
+            sendJson(res, 200, commerceStore.relistListing(slug));
+            return;
+          }
+          sendJson(res, 200, commerceStore.purchaseListing(slug));
+          return;
+        } catch (error) {
+          if (respondWithCommerceError(error)) return;
+          throw error;
+        }
       }
 
       const bundleMatch = pathname.match(/^\/api\/marketplace\/listings\/([^/]+)\/bundle$/);
@@ -365,11 +545,26 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
 
       const listingMatch = pathname.match(/^\/api\/marketplace\/listings\/([^/]+)$/);
       if (listingMatch) {
-        if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
-        const listing = store.getListingBySlug(decodeURIComponent(listingMatch[1]));
-        if (!listing) return sendError(res, 404, 'Listing not found.');
-        sendJson(res, 200, listing);
-        return;
+        const slug = decodeURIComponent(listingMatch[1]);
+        if (req.method === 'PATCH') {
+          try {
+            const payload = await readJson<{ price: { amount: number; currency?: string } }>(req);
+            sendJson(res, 200, commerceStore.updateListingPrice(slug, payload));
+          } catch (error) {
+            if (respondWithCommerceError(error)) return;
+            throw error;
+          }
+          return;
+        }
+
+        if (req.method === 'GET') {
+          const listing = store.getListingBySlug(slug);
+          if (!listing) return sendError(res, 404, 'Listing not found.');
+          sendJson(res, 200, listing);
+          return;
+        }
+
+        return methodNotAllowed(res, ['GET', 'PATCH']);
       }
 
       if (pathname.startsWith('/api/')) {
