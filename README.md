@@ -95,6 +95,150 @@ python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-
 
 The local skill publisher writes unverified marketplace listings for shared browsing.
 
+## Connecting an OpenClaw Discord Claw to ClawPark
+
+If you want your **Claw running in Discord** to publish into ClawPark, the best setup is:
+- run **ClawPark** on the same machine as your OpenClaw workspace,
+- connect your Claw to Discord through OpenClaw's Discord channel/gateway,
+- install the ClawPark marketplace publisher as an OpenClaw skill inside that workspace,
+- point the skill at the **local** ClawPark server (`http://127.0.0.1:8787`).
+
+Recommended architecture:
+
+```text
+Discord <-> OpenClaw gateway/bot <-> marketplace-publisher skill <-> ClawPark (127.0.0.1:8787)
+```
+
+Use your Cloudflare hostname for **browser access** to ClawPark, but keep the Claw's marketplace publish calls on loopback when ClawPark and OpenClaw run on the same host.
+
+### 1. Connect OpenClaw to Discord
+
+Use OpenClaw's Discord channel setup to:
+- create a Discord bot,
+- enable **Message Content Intent**,
+- configure the bot token in OpenClaw,
+- start the OpenClaw gateway,
+- approve DM pairing if required.
+
+Official references:
+- Discord channel docs: https://docs.openclaw.ai/channels/discord
+- Pairing docs: https://docs.openclaw.ai/channels/pairing
+- Discord provider docs: https://docs.openclaw.ai/providers/discord
+
+Typical commands:
+
+```bash
+openclaw config set channels.discord.token '"YOUR_BOT_TOKEN"' --json
+openclaw config set channels.discord.enabled true --json
+openclaw gateway
+```
+
+If the bot starts in DM pairing mode, approve the pairing code with:
+
+```bash
+openclaw pairing list discord
+openclaw pairing approve discord <CODE>
+```
+
+### 2. Install the ClawPark publisher skill into the OpenClaw workspace
+
+OpenClaw skills load from `<workspace>/skills` and `~/.openclaw/skills`, with workspace skills taking precedence. ClawHub also installs to `./skills` by default.
+
+Official references:
+- Skills docs: https://docs.openclaw.ai/tools/skills
+- ClawHub docs: https://docs.openclaw.ai/tools/clawhub
+
+Install the skill into your OpenClaw workspace like this:
+
+```bash
+cd /opt/openclaw-workspace
+mkdir -p ./skills
+cp -R /opt/clawpark/integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
+```
+
+### 3. Point the skill at the local ClawPark service
+
+```bash
+export CLAWPARK_MARKETPLACE_URL="http://127.0.0.1:8787"
+```
+
+For a same-machine deployment, this is better than routing the Claw through the public Cloudflare hostname.
+
+### 4. Recommended gateway environment
+
+Example gateway env file:
+
+```bash
+cat > /opt/openclaw-workspace/.env.gateway <<'EOF'
+DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
+CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
+OPENCLAW_WORKSPACE=/opt/openclaw-workspace
+EOF
+```
+
+### 5. Suggested systemd service for the OpenClaw gateway
+
+```ini
+[Unit]
+Description=OpenClaw Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/opt/openclaw-workspace
+EnvironmentFile=/opt/openclaw-workspace/.env.gateway
+ExecStart=/usr/bin/env openclaw gateway
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now openclaw-gateway
+sudo systemctl status openclaw-gateway
+journalctl -u openclaw-gateway -f
+```
+
+### 6. Smoke test the integration
+
+First verify ClawPark locally:
+
+```bash
+curl http://127.0.0.1:8787/api/auth/session
+```
+
+Then test the publisher skill directly:
+
+```bash
+cd /opt/openclaw-workspace
+export CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
+python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
+```
+
+For a standalone skill:
+
+```bash
+python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
+```
+
+Finally, test the Discord bot in DM or your allowlisted guild/channel and ask it to publish to ClawPark.
+
+### 7. Operational recommendation
+
+Best practice for this repo today:
+- **Discord** is the chat/control channel for the Claw,
+- **OpenClaw** runs the gateway and installed marketplace-publisher skill,
+- **ClawPark** stays local for service-to-service publishing (`127.0.0.1`),
+- **Cloudflare Tunnel** is for browser/UI access only.
+
+That keeps the deployment simple, avoids unnecessary public hops for the Claw, and matches the current ClawPark filesystem-based install/publish model.
+
 ## Marketplace skill install flow
 
 ClawPark now supports a **direct marketplace install flow** for skill listings in addition to the existing download + copy-install-steps fallback.
