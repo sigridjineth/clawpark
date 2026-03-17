@@ -97,21 +97,84 @@ The local skill publisher writes unverified marketplace listings for shared brow
 
 ## Marketplace skill install flow
 
-When the ClawPark marketplace API is running on the same machine as your OpenClaw workspace, skill listings can install directly into the configured skills directory.
+ClawPark now supports a **direct marketplace install flow** for skill listings in addition to the existing download + copy-install-steps fallback.
 
-Default target:
+### When direct install works
+Direct install is intended for the case where:
+- the ClawPark marketplace server is running on the **same machine** as your OpenClaw workspace,
+- the server process is allowed to write into your OpenClaw skills directory, and
+- the host has the `unzip` CLI available (the installer expands the sanitized skill ZIP on the server side).
+
+If any of those assumptions do not hold, the UI still supports:
+- **Download Skill**
+- **Copy install steps**
+
+### Default install target
+By default, the marketplace installs skills into the active OpenClaw workspace under:
 
 ```bash
 ./skills/<slug>
 ```
 
-Optional shared install target:
+That keeps installs aligned with the official OpenClaw workspace layout.
+
+### Optional shared install target
+If you want the marketplace server to install into the shared OpenClaw user-level skills directory instead, set:
 
 ```bash
 export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
 ```
 
-The Marketplace UI keeps the existing download + copy-install-steps fallback, and the server refuses to overwrite an existing installed skill unless you explicitly confirm an overwrite install.
+### Optional workspace root override
+If the marketplace server is started from a directory that is **not** your OpenClaw workspace root, point it at the correct workspace explicitly:
+
+```bash
+export MARKETPLACE_OPENCLAW_WORKSPACE="/path/to/openclaw-workspace"
+```
+
+The server also honors `OPENCLAW_WORKSPACE` and `OPENCLAW_SKILLS_DIR` if you already use those in your shell environment.
+
+### Install behavior
+From the Marketplace UI, a skill listing can now:
+1. call `POST /api/marketplace/listings/:slug/install`,
+2. download the sanitized skill ZIP from marketplace storage,
+3. install it into the configured OpenClaw skills root, and
+4. return the final installed path to the UI.
+
+The flow is **safe by default**:
+- first install succeeds normally,
+- re-installing over an existing skill returns a conflict,
+- overwrite only happens after an explicit overwrite request.
+
+### Manual fallback commands
+If you do not want direct install, or if the marketplace server cannot write to your OpenClaw workspace, the copied fallback steps match the same directory conventions:
+
+```bash
+mkdir -p ./skills/<slug>
+unzip <slug>.skill.zip -d ./skills/<slug>
+
+# shared fallback
+mkdir -p ~/.openclaw/skills/<slug>
+unzip <slug>.skill.zip -d ~/.openclaw/skills/<slug>
+```
+
+### Recommended local setup
+For the smoothest local loop:
+
+```bash
+cd /path/to/openclaw-workspace
+cp -R /path/to/clawpark/integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
+export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
+export MARKETPLACE_OPENCLAW_WORKSPACE="$PWD"
+# optional shared fallback
+# export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
+```
+
+With that setup, you can:
+- publish a local skill into ClawPark,
+- browse it in Marketplace,
+- click **Install into OpenClaw**, or
+- fall back to download/copy-install commands when preferred.
 
 ## Local development
 
