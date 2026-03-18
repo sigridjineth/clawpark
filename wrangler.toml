@@ -1,0 +1,12 @@
+name = "clawpark-marketplace"
+main = "server/worker.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+[[d1_databases]]
+binding = "DB"
+database_name = "clawpark-db"
+database_id = "f1fcbb58-087f-4865-ae67-28c8b5374b2f"
+[vars]
+MARKETPLACE_PUBLIC_ORIGIN = "https://clawpark-marketplace.workers.dev"
+MARKETPLACE_CLIENT_ORIGIN = "https://clawpark.pages.dev"
+
