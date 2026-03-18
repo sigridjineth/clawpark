@@ -59,6 +59,15 @@ Each Claw is modeled across four dimensions:
 9. Save/export the new specimen
 10. Publish a Claw or Skill into Marketplace
 
+## Breeding system reference
+
+If you want a dedicated explanation of how the current lab / breeding system works before designing that part of the webapp, read:
+
+- `docs/clawpark-breeding-lab-system.md` — dedicated design/architecture walkthrough
+- `docs/clawpark-product-spec.md` — product-level breeding flow
+- `docs/clawpark-technical-spec.md` — technical architecture summary
+- `.omx/plans/techspec-clawpark-openclaw-genome.md` — implementation-oriented breeding/lab notes
+
 ## Verified marketplace publish flow
 
 1. Start the marketplace server
