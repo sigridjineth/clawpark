@@ -18,7 +18,7 @@ const stagger = {
 };
 
 export function Connect({ connectedIdentity, discordAuthUrl }: ConnectProps) {
-  const authUrl = discordAuthUrl ?? '/auth/discord';
+  const authUrl = discordAuthUrl ?? '/api/auth/discord/start';
 
   return (
     <motion.section
