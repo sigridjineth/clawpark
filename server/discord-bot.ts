@@ -78,9 +78,29 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
   // Extract mentioned users from raw message content
   const botId = msg.client.user?.id;
   console.log(`[ClawPark Bot] Raw content: "${msg.content}"`);
-  const allMentionIds = [...msg.content.matchAll(/<@!?(\d+)>/g)].map((m) => m[1]);
-  console.log(`[ClawPark Bot] All mention IDs: ${allMentionIds.join(', ') || 'none'}, botId: ${botId}`);
-  const rawMentionIds = allMentionIds.filter((id) => id !== botId);
+  // Match both user mentions <@id>/<@!id> AND role mentions <@&id>
+  const allMentionMatches = [...msg.content.matchAll(/<@[!&]?(\d+)>/g)];
+  const allMentionIds = allMentionMatches.map((m) => ({ id: m[1], isRole: m[0].includes('&') }));
+  console.log(`[ClawPark Bot] All mentions: ${allMentionIds.map((m) => `${m.id}(${m.isRole ? 'role' : 'user'})`).join(', ') || 'none'}, botId: ${botId}`);
+  // For role mentions, try to find guild members with that role
+  const rawMentionIds: string[] = [];
+  for (const mention of allMentionIds) {
+    if (mention.id === botId) continue;
+    if (mention.isRole && msg.guild) {
+      // It's a role mention — find members with this role
+      try {
+        const role = msg.guild.roles.cache.get(mention.id);
+        if (role) {
+          const members = role.members;
+          for (const [memberId] of members) {
+            if (memberId !== botId) rawMentionIds.push(memberId);
+          }
+        }
+      } catch { /* skip */ }
+    } else {
+      rawMentionIds.push(mention.id);
+    }
+  }
   const mentionedUsersList: Array<{ id: string; displayName: string }> = [];
   for (const id of rawMentionIds) {
     try {
