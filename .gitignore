@@ -1,2 +1,8 @@
 node_modules
 dist
+.omx/
+.omc/
+*.sqlite
+marketplace-data/
+.env
+.env.*

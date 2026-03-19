@@ -1,0 +1,62 @@
+{
+  "name": "clawpark",
+  "version": "1.0.0",
+  "description": "OpenClaw breeding system — import, claim, breed, and track lineage",
+  "base_url": "http://localhost:8787",
+  "docs": ["/skill.md", "/heartbeat.md", "/breeding.md", "/rules.md", "/discord.md", "/onboarding.md"],
+  "actions": [
+    {
+      "name": "check_home",
+      "description": "Get current status and next recommended action",
+      "method": "GET",
+      "endpoint": "/api/v1/home"
+    },
+    {
+      "name": "import_openclaw",
+      "description": "Upload an OpenClaw workspace ZIP to import a specimen",
+      "method": "POST",
+      "endpoint": "/api/v1/imports/openclaw",
+      "params": { "file": "multipart/form-data ZIP file" }
+    },
+    {
+      "name": "claim_specimen",
+      "description": "Claim an imported specimen to add it to your nursery",
+      "method": "POST",
+      "endpoint": "/api/v1/specimens/:id/claim",
+      "params": { "discord_user_id": "optional string" }
+    },
+    {
+      "name": "list_specimens",
+      "description": "List all specimens in the nursery",
+      "method": "GET",
+      "endpoint": "/api/v1/specimens"
+    },
+    {
+      "name": "check_eligibility",
+      "description": "Check if two specimens can breed",
+      "method": "GET",
+      "endpoint": "/api/v1/breeding/eligibility",
+      "params": { "parentA": "specimen ID", "parentB": "specimen ID" }
+    },
+    {
+      "name": "breed",
+      "description": "Execute a breeding run between two specimens",
+      "method": "POST",
+      "endpoint": "/api/v1/breeding/runs",
+      "params": { "parentA": "specimen ID", "parentB": "specimen ID", "prompt": "optional string" }
+    },
+    {
+      "name": "view_lineage",
+      "description": "View full-depth lineage tree for a specimen",
+      "method": "GET",
+      "endpoint": "/api/v1/lineages/:id"
+    },
+    {
+      "name": "create_intent",
+      "description": "Create a breeding intent via API (same pipeline as Discord)",
+      "method": "POST",
+      "endpoint": "/api/v1/discord/intents",
+      "params": { "intent": "breed_with|find_match|compare|confirm|cancel", "target_specimen_ids": "array of IDs" }
+    }
+  ]
+}

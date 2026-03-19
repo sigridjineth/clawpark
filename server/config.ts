@@ -16,6 +16,9 @@ export interface MarketplaceServerConfig {
   skillInstallRoot: string;
   serveDist: boolean;
   distDir: string;
+  openrouterApiKey: string;
+  openrouterModel: string;
+  discordBotToken: string;
 }
 
 function required(value: string | undefined, fallback = '') {
@@ -54,6 +57,9 @@ export function loadConfig(overrides: Partial<MarketplaceServerConfig> = {}): Ma
     skillInstallRoot,
     serveDist: overrides.serveDist ?? process.env.MARKETPLACE_SERVE_DIST !== '0',
     distDir: overrides.distDir ?? resolve(cwd, 'dist'),
+    openrouterApiKey: overrides.openrouterApiKey ?? required(process.env.OPENROUTER_API_KEY),
+    openrouterModel: overrides.openrouterModel ?? required(process.env.OPENROUTER_MODEL, 'openai/gpt-4o-mini'),
+    discordBotToken: overrides.discordBotToken ?? required(process.env.DISCORD_BOT_TOKEN),
   };
 }
 

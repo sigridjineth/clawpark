@@ -20,6 +20,8 @@ import {
   readOauthState,
   readSessionUserId,
 } from './sessions.ts';
+import { createSpecimenStore } from './specimenStore.ts';
+import { registerV1Routes } from './v1Routes.ts';
 
 function isSecureCookie(config: MarketplaceServerConfig) {
   return new URL(config.publicOrigin).protocol === 'https:';
@@ -95,6 +97,12 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
   const db = createDatabase(config.sqlitePath);
   const store = createMarketplaceStore(db, config.storageDir);
   const commerceStore = createMockCommerceStore();
+  const specimenStore = createSpecimenStore(db);
+  const v1Handler = registerV1Routes(
+    async () => false,
+    config,
+    specimenStore,
+  );
   const secureCookies = isSecureCookie(config);
 
   const server = createServer(async (req, res) => {
@@ -119,6 +127,25 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
         }
         return false;
       };
+
+      // Serve contract files at root (skill.md, heartbeat.md, etc.)
+      const contractFiles = ['skill.md', 'heartbeat.md', 'breeding.md', 'rules.md', 'skill.json', 'discord.md', 'onboarding.md'];
+      const contractName = pathname.replace(/^\//, '');
+      if (contractFiles.includes(contractName) && req.method === 'GET') {
+        try {
+          const { readFile: rf } = await import('node:fs/promises');
+          const contractPath = join(process.cwd(), 'public', contractName);
+          const content = await rf(contractPath, 'utf8');
+          const ct = contractName.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/markdown; charset=utf-8';
+          res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'public, max-age=300' });
+          res.end(content);
+          return;
+        } catch { /* fall through */ }
+      }
+
+      // ClawPark v1 API routes
+      const handled = await v1Handler(req, res, url);
+      if (handled) return;
 
       if (pathname === '/api/openapi.json') {
         if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);

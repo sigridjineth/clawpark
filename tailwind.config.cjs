@@ -4,8 +4,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        display: ['"Bebas Neue"', 'sans-serif'],
-        body: ['"IBM Plex Sans"', 'sans-serif'],
+        display: ['Ndot57', '"IBM Plex Mono"', 'monospace'],
+        mono: ['"IBM Plex Mono"', 'monospace'],
+        body: ['"IBM Plex Mono"', 'monospace'],
       },
       boxShadow: {
         float: '0 20px 50px rgba(0, 0, 0, 0.5)',

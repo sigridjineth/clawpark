@@ -1,13 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@font-face {
+  font-family: 'Ndot57';
+  src: url('/fonts/Ndot57-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color: #F5F0E1;
-  background: #060E09;
-  font-family: 'IBM Plex Sans', sans-serif;
+  /* OpenClaw design tokens */
+  --openclaw-text: #f5f5f5;
+  --openclaw-muted: #9b9b9b;
+  --openclaw-cta: #fafafa;
+  --openclaw-glass: rgb(107 107 107 / 30%);
+  --openclaw-outline: rgb(255 255 255 / 10%);
+  --openclaw-border: #d4d4d4;
+
+  color: var(--openclaw-text);
+  background: #000000;
+  font-family: 'IBM Plex Mono', monospace;
 }
 
 * {
@@ -21,25 +37,8 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background: #060E09;
-  color: #F5F0E1;
-}
-
-/* Subtle scan-line overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(79, 121, 66, 0.03) 2px,
-      rgba(79, 121, 66, 0.03) 4px
-    );
+  background: #000000;
+  color: var(--openclaw-text);
 }
 
 button,
@@ -62,61 +61,64 @@ button:disabled {
 }
 
 ::selection {
-  background: rgba(212, 165, 55, 0.3);
-  color: #F5F0E1;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }
 
 @layer components {
-  /* Card with dark jungle bg */
+  /* Glass card — matches openclaw AgentListingCard */
   .jp-card {
-    @apply rounded-lg border border-jungle-700/60 backdrop-blur;
-    background: linear-gradient(180deg, #142318 0%, #0D1A12 100%);
+    @apply rounded-[10px] border border-white/10 backdrop-blur-sm;
+    background: var(--openclaw-glass);
   }
 
-  /* Primary amber CTA */
+  /* Primary CTA button */
   .jp-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-amber-dark
-      bg-amber px-5 py-3 text-sm font-bold uppercase tracking-wider text-jungle-950
-      transition hover:-translate-y-0.5 hover:bg-amber-light active:translate-y-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] border
+      border-[var(--openclaw-border)] px-4 py-2 font-mono text-sm
+      text-[var(--openclaw-cta)] transition-colors
+      hover:bg-white/15 hover:text-white;
+    background: var(--openclaw-glass);
   }
 
   .jp-btn:disabled {
-    @apply border-jungle-700 bg-jungle-800 text-bone-muted hover:translate-y-0;
+    @apply border-white/10 text-[var(--openclaw-muted)] hover:bg-transparent;
   }
 
   /* Secondary outline button */
   .jp-btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border border-jungle-600
-      bg-jungle-800/80 px-5 py-3 text-sm font-bold uppercase tracking-wider text-bone-dim
-      transition hover:-translate-y-0.5 hover:border-fern/40 active:translate-y-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] border
+      border-white/10 px-4 py-2 font-mono text-sm
+      text-[var(--openclaw-muted)] transition-colors
+      hover:border-white/25 hover:text-[var(--openclaw-text)];
+    background: transparent;
   }
 
   /* Small tag/pill */
   .jp-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-jungle-600/50
-      bg-jungle-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-bone-dim;
+    @apply inline-flex items-center gap-1.5 rounded-[8px] border border-white/10
+      px-3 py-1 font-mono text-[11px] text-[var(--openclaw-muted)];
+    background: var(--openclaw-glass);
   }
 
   /* Section label */
   .jp-label {
-    @apply text-[10px] font-bold uppercase tracking-[0.3em] text-fern;
+    @apply font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[var(--openclaw-muted)];
   }
 }
 
-/* Avatar shell — simplified */
+/* Avatar shell */
 .avatar-shell {
   position: relative;
   display: inline-grid;
   place-items: center;
   overflow: hidden;
   border-radius: 0.75rem;
-  border: 1px solid rgba(212, 165, 55, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background:
-    radial-gradient(circle at 30% 20%, rgba(212, 165, 55, 0.06), transparent 40%),
-    linear-gradient(160deg, color-mix(in srgb, var(--primary) 15%, #0D1A12), color-mix(in srgb, var(--secondary) 20%, #142318));
-  box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.3),
-    0 0 calc(30px * var(--glow)) color-mix(in srgb, var(--secondary) 8%, transparent);
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.06), transparent 40%),
+    linear-gradient(160deg, rgba(107, 107, 107, 0.3), rgba(0, 0, 0, 0.5));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 .avatar-shell svg {

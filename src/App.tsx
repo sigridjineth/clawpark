@@ -1,18 +1,26 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BirthScene } from './components/Birth/BirthScene';
 import { BreedLab } from './components/BreedLab/BreedLab';
-import { Gallery } from './components/Gallery/Gallery';
+import { Connect } from './components/Connect/Connect';
+import { Home } from './components/Home/Home';
+import { Import } from './components/Import/Import';
 import { LineageGraph } from './components/Lineage/LineageGraph';
-import { Marketplace } from './components/Marketplace/Marketplace';
+import { Nursery } from './components/Nursery/Nursery';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
-import type { Claw } from './types/claw';
+import type { Claw, Screen } from './types/claw';
 import { attachDemoShortcut, isDemoModeFromSearch, updateDemoModeQuery } from './utils/demoMode';
 
-const SCREENS = ['gallery', 'breedLab', 'birth', 'lineage', 'marketplace'] as const;
+const NAV_SCREENS: Array<{ screen: Screen; label: string }> = [
+  { screen: 'home', label: 'Home' },
+  { screen: 'import', label: 'Import' },
+  { screen: 'nursery', label: 'Nursery' },
+  { screen: 'breedLab', label: 'Lab' },
+];
 
 function App() {
   const {
     claws,
+    specimens,
     selectedIds,
     selectClaw,
     screen,
@@ -33,9 +41,15 @@ function App() {
     toggleDemoMode,
     setDemoMode,
     loadDemoPair,
-    claimMarketplaceClaw,
-    importClaws,
+    homePayload,
+    importPreview,
+    fetchHome,
+    fetchSpecimens,
+    importClaw,
+    claimClaw,
   } = useClawStore();
+
+  const [homeLoading, setHomeLoading] = useState(true);
 
   const selectedClaws = useMemo(() => getSelectedClaws(claws, selectedIds), [claws, selectedIds]);
 
@@ -49,10 +63,16 @@ function App() {
   }, [demoMode]);
 
   useEffect(() => {
-    if (demoMode && screen === 'gallery' && selectedIds.length === 0) {
+    if (demoMode && screen === 'nursery' && selectedIds.length === 0) {
       loadDemoPair();
     }
   }, [demoMode, loadDemoPair, screen, selectedIds.length]);
+
+  // Bootstrap data from server
+  useEffect(() => {
+    setHomeLoading(true);
+    void Promise.all([fetchHome(), fetchSpecimens()]).finally(() => setHomeLoading(false));
+  }, [fetchHome, fetchSpecimens]);
 
   const parentPair = useMemo<[Claw, Claw] | null>(() => {
     if (selectedClaws.length === 2) {
@@ -70,76 +90,98 @@ function App() {
     return null;
   }, [breedResult, claws, selectedClaws]);
 
-  const currentIndex = SCREENS.indexOf(screen);
+  const handleClearPreview = useCallback(() => {
+    useClawStore.setState({ importPreview: null });
+  }, []);
 
   return (
-    <div className="min-h-screen bg-jungle-950 text-bone">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 md:px-8 md:py-6">
-        {/* Minimal header */}
-        <header className="flex items-center justify-between gap-4">
+    <div className="relative min-h-screen overflow-x-hidden bg-black text-[var(--openclaw-text)]">
+      {/* Absolute header — matches reference layout */}
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 mx-auto h-16 w-full sm:h-20">
+        <button
+          type="button"
+          onClick={() => setScreen('home')}
+          className="pointer-events-auto absolute left-4 top-4 font-display text-[20px] leading-none text-white sm:text-[24px]"
+        >
+          ClawPark
+        </button>
+
+        {/* Glass pill nav — centered */}
+        <nav className="pointer-events-auto absolute left-1/2 top-3 -translate-x-1/2 sm:top-4">
+          <ul
+            className="relative flex rounded-[10px] border border-white/10 p-[2px]"
+            style={{ background: 'var(--openclaw-glass)' }}
+          >
+            {NAV_SCREENS.map(({ screen: s, label }) => (
+              <li key={s}>
+                <button
+                  type="button"
+                  onClick={() => setScreen(s)}
+                  className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-4 py-2 font-mono text-sm leading-5 transition-colors ${
+                    screen === s
+                      ? 'border-[var(--openclaw-border)] bg-[var(--openclaw-outline)] text-[var(--openclaw-text)]'
+                      : 'border-transparent text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        {/* Right side: specimen count + demo toggle */}
+        <div className="pointer-events-auto absolute right-4 top-3.5 flex items-center gap-2 sm:top-4">
+          <span className="jp-pill">{claws.length}</span>
           <button
             type="button"
-            onClick={() => setScreen('gallery')}
-            className="flex items-center gap-3"
+            onClick={toggleDemoMode}
+            className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-3 py-2 font-mono text-[11px] transition-colors ${
+              demoMode
+                ? 'border-white/30 bg-white/15 text-white'
+                : 'border-white/10 text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
+            }`}
+            style={{ background: demoMode ? undefined : 'var(--openclaw-glass)' }}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber/20 bg-jungle-800">
-              <span className="text-lg">🧬</span>
-            </div>
-            <h1 className="font-display text-2xl leading-none text-bone md:text-3xl">ClawPark</h1>
+            Demo {demoMode ? 'On' : 'Off'}
           </button>
+        </div>
+      </header>
 
-          <div className="flex items-center gap-2">
-            {/* Step dots */}
-            <div className="hidden items-center gap-1 sm:flex">
-              {SCREENS.filter((s) => s !== 'marketplace').map((s, i) => (
-                <div
-                  key={s}
-                  className={`h-2 rounded-full transition-all ${
-                    s === screen
-                      ? 'w-6 bg-amber'
-                      : i < currentIndex && screen !== 'marketplace'
-                        ? 'w-2 bg-fern'
-                        : 'w-2 bg-jungle-700'
-                  }`}
-                />
-              ))}
-            </div>
-
-            <span className="jp-pill ml-2">{claws.length} specimens</span>
-
-            <button
-              type="button"
-              onClick={toggleDemoMode}
-              className={`rounded-md border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
-                demoMode
-                  ? 'border-amber-dark bg-amber text-jungle-950'
-                  : 'border-jungle-600 bg-jungle-800 text-bone-dim hover:border-fern/40'
-              }`}
-            >
-              Demo {demoMode ? 'On' : 'Off'}
-            </button>
-          </div>
-        </header>
-
-        {/* Content */}
+      {/* Content — padded below absolute header */}
+      <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-24 sm:px-6 sm:pt-28">
         <main className="flex-1">
-          {screen === 'gallery' && (
-            <Gallery
-              claws={claws}
-              selectedIds={selectedIds}
-              onSelect={selectClaw}
-              onContinue={() => setScreen('breedLab')}
-              onMarketplace={() => setScreen('marketplace')}
-              demoMode={demoMode}
+          {screen === 'home' && (
+            <Home
+              homePayload={homePayload}
+              loading={homeLoading}
+              onNavigate={setScreen}
             />
           )}
 
-          {screen === 'marketplace' && (
-            <Marketplace
-              ownedClaws={claws}
-              onClaim={claimMarketplaceClaw}
-              onImport={importClaws}
-              onBack={() => setScreen('gallery')}
+          {screen === 'import' && (
+            <Import
+              onImport={importClaw}
+              onClaim={claimClaw}
+              importPreview={importPreview}
+              onClearPreview={handleClearPreview}
+              discordUserId={homePayload?.connected_identity?.discordUserId}
+            />
+          )}
+
+          {screen === 'nursery' && (
+            <Nursery
+              claws={claws}
+              specimens={specimens}
+              selectedIds={selectedIds}
+              onSelect={selectClaw}
+              onContinue={() => setScreen('breedLab')}
+            />
+          )}
+
+          {screen === 'connect' && (
+            <Connect
+              connectedIdentity={homePayload?.connected_identity ?? null}
             />
           )}
 
@@ -152,7 +194,7 @@ function App() {
               onBreedPromptChange={setBreedPrompt}
               onTalkToParents={generateParentConversation}
               onPreferredTrait={setPreferredTrait}
-              onBack={() => setScreen('gallery')}
+              onBack={() => setScreen('nursery')}
               onBreed={breedSelected}
               prediction={prediction}
             />
@@ -166,7 +208,7 @@ function App() {
               onPhaseChange={setBirthPhase}
               onViewLineage={() => setScreen('lineage')}
               onBreedAgain={addChildToGallery}
-              onBackToGallery={() => setScreen('gallery')}
+              onBackToGallery={() => setScreen('nursery')}
             />
           )}
 
@@ -179,7 +221,7 @@ function App() {
                     Back
                   </button>
                   <button type="button" onClick={addChildToGallery} className="jp-btn">
-                    Save child to gallery
+                    Save to nursery
                   </button>
                 </div>
               </div>

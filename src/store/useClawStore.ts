@@ -3,11 +3,19 @@ import { INITIAL_CLAWS } from '../data/claws';
 import { breed } from '../engine/breed';
 import { buildBreedingConversation } from '../engine/openclaw';
 import { predictBreed } from '../engine/predict';
+import * as api from '../services/clawparkApi';
+import type { HomePayload } from '../types/home';
 import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
-import { loadClawsFromStorage, saveClawsToStorage } from '../utils/clawIO';
+import type { ImportPreview, Specimen } from '../types/specimen';
 import { DEMO_PARENT_IDS, DEMO_SEED, resolveBreedSeed } from '../utils/demoMode';
 
 interface ClawStore {
+  // Server state
+  specimens: Specimen[];
+  homePayload: HomePayload | null;
+  importPreview: ImportPreview | null;
+
+  // Local claw cache (derived from specimens + INITIAL_CLAWS for breed flow)
   claws: Claw[];
   selectedIds: string[];
   selectClaw: (id: string) => void;
@@ -43,7 +51,13 @@ interface ClawStore {
   setDemoMode: (value: boolean) => void;
   loadDemoPair: () => void;
 
-  // Marketplace & Import/Export
+  // API actions
+  fetchHome: () => Promise<void>;
+  fetchSpecimens: () => Promise<void>;
+  importClaw: (file: File, discordUserId?: string) => Promise<void>;
+  claimClaw: (id: string, discordUserId?: string) => Promise<void>;
+
+  // Legacy compat
   claimMarketplaceClaw: (claw: Claw) => void;
   importClaws: (claws: Claw[]) => void;
   removeClaw: (id: string) => void;
@@ -57,19 +71,11 @@ export function getSelectedClaws(claws: Claw[], selectedIds: string[]): Claw[] {
     .filter((claw): claw is Claw => Boolean(claw));
 }
 
-function loadInitialClaws(): Claw[] {
-  const saved = loadClawsFromStorage();
-  if (saved && saved.length > 0) {
-    // Merge: ensure all INITIAL_CLAWS are present (in case new ones were added)
-    const savedIds = new Set(saved.map((c) => c.id));
-    const missing = INITIAL_CLAWS.filter((c) => !savedIds.has(c.id));
-    return [...saved, ...missing];
-  }
-  return INITIAL_CLAWS;
-}
-
 export function createInitialStoreState() {
   return {
+    specimens: [] as Specimen[],
+    homePayload: null as HomePayload | null,
+    importPreview: null as ImportPreview | null,
     claws: INITIAL_CLAWS,
     selectedIds: [] as string[],
     prediction: null as BreedPrediction | null,
@@ -78,20 +84,14 @@ export function createInitialStoreState() {
     breedingConversation: [] as ConversationTurn[],
     breedResult: null as BreedResult | null,
     birthPhase: 'merge' as BirthPhase,
-    screen: 'gallery' as Screen,
+    screen: 'home' as Screen,
     demoMode: false,
     breedCount: 0,
   };
 }
 
-/** Helper to persist claws after mutations */
-function persistClaws(claws: Claw[]) {
-  saveClawsToStorage(claws);
-}
-
 export const useClawStore = create<ClawStore>((set, get) => ({
   ...createInitialStoreState(),
-  claws: loadInitialClaws(),
 
   selectClaw: (id) => {
     const selected = [...get().selectedIds];
@@ -119,9 +119,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   generateParentConversation: () => {
     const state = get();
     const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
-    if (selectedClaws.length !== 2) {
-      return;
-    }
+    if (selectedClaws.length !== 2) return;
 
     const prediction =
       state.prediction ??
@@ -169,9 +167,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   breedSelected: () => {
     const state = get();
     const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
-    if (selectedClaws.length !== 2) {
-      return;
-    }
+    if (selectedClaws.length !== 2) return;
 
     const result = breed({
       parentA: selectedClaws[0],
@@ -206,14 +202,11 @@ export const useClawStore = create<ClawStore>((set, get) => ({
 
   addChildToGallery: () => {
     const result = get().breedResult;
-    if (!result) {
-      return;
-    }
+    if (!result) return;
 
     set((state) => {
       const exists = state.claws.some((claw) => claw.id === result.child.id);
       const nextClaws = exists ? state.claws : [result.child, ...state.claws];
-      persistClaws(nextClaws);
       return {
         claws: nextClaws,
         selectedIds: [],
@@ -221,7 +214,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
         breedPrompt: 'Tell me what kind of child should survive this hatch.',
         breedingConversation: [],
         prediction: null,
-        screen: 'gallery' as Screen,
+        screen: 'nursery' as Screen,
         birthPhase: 'merge' as BirthPhase,
       };
     });
@@ -235,7 +228,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
     set({
       breedResult: null,
       birthPhase: 'merge',
-      screen: 'gallery',
+      screen: 'nursery',
       preferredTraitId: null,
       breedPrompt: 'Tell me what kind of child should survive this hatch.',
       breedingConversation: [],
@@ -244,7 +237,6 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   },
 
   setBirthPhase: (phase) => set({ birthPhase: phase }),
-
   setScreen: (screen) => set({ screen }),
 
   toggleDemoMode: () => set((state) => ({ demoMode: !state.demoMode })),
@@ -253,49 +245,76 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   loadDemoPair: () => {
     const state = get();
     const demoIds = DEMO_PARENT_IDS.filter((id) => state.claws.some((claw) => claw.id === id));
-    if (demoIds.length !== 2) {
-      return;
-    }
-
+    if (demoIds.length !== 2) return;
     set({ selectedIds: [...demoIds] });
     get().computePrediction();
   },
 
-  // Marketplace
+  // API actions
+  fetchHome: async () => {
+    try {
+      const homePayload = await api.getHome();
+      set({ homePayload });
+    } catch {
+      // Server unavailable — silently ignore, UI shows empty state
+    }
+  },
+
+  fetchSpecimens: async () => {
+    try {
+      const specimens = await api.listSpecimens();
+      const specimenClaws = specimens.map((s) => s.claw);
+      set((state) => {
+        const localIds = new Set(specimenClaws.map((c) => c.id));
+        const initialOnly = state.claws.filter((c) => !localIds.has(c.id));
+        return { specimens, claws: [...specimenClaws, ...initialOnly] };
+      });
+    } catch {
+      // Server unavailable — keep local INITIAL_CLAWS
+    }
+  },
+
+  importClaw: async (file, discordUserId) => {
+    const preview = await api.importOpenClaw(file, discordUserId);
+    set({ importPreview: preview });
+  },
+
+  claimClaw: async (id, discordUserId) => {
+    const specimen = await api.claimSpecimen(id, discordUserId);
+    set((state) => {
+      const exists = state.claws.some((c) => c.id === specimen.claw.id);
+      const nextClaws = exists ? state.claws : [specimen.claw, ...state.claws];
+      const nextSpecimens = state.specimens.some((s) => s.id === specimen.id)
+        ? state.specimens.map((s) => (s.id === specimen.id ? specimen : s))
+        : [specimen, ...state.specimens];
+      return { claws: nextClaws, specimens: nextSpecimens, importPreview: null, screen: 'nursery' as Screen };
+    });
+  },
+
+  // Legacy compat
   claimMarketplaceClaw: (claw) => {
     set((state) => {
       const exists = state.claws.some((c) => c.id === claw.id);
       if (exists) return state;
-      const nextClaws = [claw, ...state.claws];
-      persistClaws(nextClaws);
-      return { claws: nextClaws };
+      return { claws: [claw, ...state.claws] };
     });
   },
 
-  // Import
   importClaws: (newClaws) => {
     set((state) => {
       const existingIds = new Set(state.claws.map((c) => c.id));
       const fresh = newClaws.filter((c) => !existingIds.has(c.id));
       if (fresh.length === 0) return state;
-      const nextClaws = [...fresh, ...state.claws];
-      persistClaws(nextClaws);
-      return { claws: nextClaws };
+      return { claws: [...fresh, ...state.claws] };
     });
   },
 
-  // Remove
   removeClaw: (id) => {
-    set((state) => {
-      const nextClaws = state.claws.filter((c) => c.id !== id);
-      persistClaws(nextClaws);
-      return { claws: nextClaws, selectedIds: state.selectedIds.filter((sid) => sid !== id) };
-    });
+    set((state) => ({
+      claws: state.claws.filter((c) => c.id !== id),
+      selectedIds: state.selectedIds.filter((sid) => sid !== id),
+    }));
   },
 
-  reset: () => {
-    const initial = createInitialStoreState();
-    persistClaws(initial.claws);
-    set(initial);
-  },
+  reset: () => set(createInitialStoreState()),
 }));

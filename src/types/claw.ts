@@ -168,7 +168,7 @@ export type BirthPhase =
   | 'reveal_intro'
   | 'complete';
 
-export type Screen = 'gallery' | 'breedLab' | 'birth' | 'lineage' | 'marketplace';
+export type Screen = 'home' | 'import' | 'nursery' | 'breedLab' | 'birth' | 'lineage' | 'exchange' | 'connect';
 
 export interface ArchetypeEntry {
   traitComboKey: string;
