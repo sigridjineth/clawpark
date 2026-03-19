@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowRight, Filter } from 'lucide-react';
 import type { Claw } from '../../types/claw';
 import type { BreedState, OwnershipState, Specimen } from '../../types/specimen';
@@ -27,18 +28,15 @@ const BREED_FILTERS: Array<{ value: BreedState | 'all'; label: string }> = [
   { value: 'ineligible', label: 'Ineligible' },
 ];
 
-const BREED_STATE_STYLES: Record<BreedState, string> = {
-  ready: 'border-[rgba(61,235,186,0.5)] bg-[rgba(61,235,186,0.15)]',
-  cooldown: 'border-[rgba(235,194,61,0.5)] bg-[rgba(235,194,61,0.15)]',
-  ineligible: 'border-[rgba(235,61,61,0.5)] bg-[rgba(235,61,61,0.15)]',
-};
+// Trait chip colors — matches AgentListingCard traitVisualMap
+const SOUL_TRAIT_CHIP = 'border-[rgba(171,114,255,0.65)] bg-[rgba(171,114,255,0.19)]';
+const SKILL_CHIP = 'border-[rgba(61,151,235,0.65)] bg-[rgba(61,151,235,0.19)]';
+const TOOL_CHIP = 'border-[rgba(235,194,61,0.65)] bg-[rgba(235,194,61,0.19)]';
 
-const PROVENANCE_STYLES: Record<string, string> = {
-  genesis: 'border-amber/30 text-amber',
-  bred: 'border-fern/30 text-fern',
-  imported: 'border-jungle-600/40 text-bone-dim',
-  claimed: 'border-jungle-600/40 text-bone-dim',
-  purchased: 'border-fern/20 text-fern',
+const BREED_STATE_CHIP: Record<BreedState, string> = {
+  ready: 'border-[rgba(61,235,186,0.65)] bg-[rgba(61,235,186,0.19)]',
+  cooldown: 'border-[rgba(235,194,61,0.65)] bg-[rgba(235,194,61,0.19)]',
+  ineligible: 'border-[rgba(235,61,61,0.65)] bg-[rgba(235,61,61,0.19)]',
 };
 
 interface SpecimenCardProps {
@@ -50,17 +48,19 @@ interface SpecimenCardProps {
 
 function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps) {
   return (
-    <div
-      className={`group relative flex flex-col gap-0 overflow-hidden rounded-[10px] border p-4 transition-colors ${
-        selected
-          ? 'border-white/35'
-          : 'border-white/10 hover:border-white/25'
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.18 }}
+      className={`relative flex flex-col gap-0 overflow-hidden rounded-[10px] border p-4 transition-colors ${
+        selected ? 'border-white/35' : 'border-white/10 hover:border-white/25'
       }`}
       style={{ background: 'var(--openclaw-glass)' }}
     >
-      {/* Avatar area — matches 129px image area in AgentListingCard */}
-      <div className="relative h-[110px] w-full shrink-0 overflow-hidden rounded-[8px] mb-3 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_65%)]">
-        <ClawAvatar visual={claw.visual} name={claw.name} size={90} />
+      {/* Image area — matches AgentListingCard h-[129px] */}
+      <div className="relative mb-3 flex h-[129px] w-full shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.09),transparent_65%)]">
+        <ClawAvatar visual={claw.visual} name={claw.name} size={100} />
         {selected && (
           <span className="absolute right-2 top-2 rounded-[6px] border border-white/30 bg-white/15 px-2 py-0.5 font-mono text-[10px] text-white">
             Selected
@@ -68,27 +68,30 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
         )}
       </div>
 
-      {/* Name + meta */}
-      <div className="flex flex-col justify-between" style={{ minHeight: 130 }}>
-        <div>
-          <div className="font-display text-[22px] leading-6 text-white">{claw.name}</div>
-          <div className="mt-1 font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
-            Gen-{claw.generation}
-            {specimen && ` · ${specimen.provenance.badge}`}
+      {/* Content — matches AgentListingCard h-[154px] flex flex-col justify-between */}
+      <div className="flex flex-col justify-between" style={{ minHeight: 154 }}>
+        {/* Name + generation — matches font-display text-[24px] */}
+        <div className="overflow-hidden">
+          <h2 className="font-display text-[24px] leading-6 text-white">{claw.name}</h2>
+          <div className="mt-1 font-mono text-[10px] leading-4 text-white">
+            <p>Gen-{claw.generation}</p>
+            {claw.identity && (
+              <p className="max-w-[180px]">
+                {claw.identity.emoji} {claw.identity.creature}
+              </p>
+            )}
+            {!claw.identity && claw.intro && (
+              <p className="max-w-[180px] truncate">{claw.intro}</p>
+            )}
           </div>
-          {claw.identity && (
-            <div className="mt-1 font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
-              {claw.identity.emoji} {claw.identity.creature}
-            </div>
-          )}
         </div>
 
-        {/* Trait badges — matches AgentListingCard trait chips */}
-        <div className="mt-2 flex flex-wrap gap-x-[10px] gap-y-[8px] overflow-hidden" style={{ maxHeight: 70 }}>
+        {/* Trait chips — matches AgentListingCard trait chip pattern */}
+        <div className="flex h-[82px] flex-wrap content-start items-start gap-x-[10px] gap-y-[8px] overflow-hidden">
           {claw.soul.traits.map((trait) => (
             <span
               key={trait.id}
-              className="inline-flex h-5 items-center gap-1 rounded-[8px] border border-white/20 bg-white/10 px-2 font-mono text-[11px] leading-4 text-[var(--openclaw-cta)]"
+              className={`inline-flex h-5 items-center rounded-[8px] border px-2 font-mono text-[12px] leading-4 text-[var(--openclaw-cta)] ${SOUL_TRAIT_CHIP}`}
             >
               {trait.label}
             </span>
@@ -96,7 +99,7 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
           {claw.skills.badges.map((skill) => (
             <span
               key={skill.id}
-              className="inline-flex h-5 items-center gap-1 rounded-[8px] border border-[rgba(61,151,235,0.5)] bg-[rgba(61,151,235,0.15)] px-2 font-mono text-[11px] leading-4 text-[var(--openclaw-cta)]"
+              className={`inline-flex h-5 items-center rounded-[8px] border px-2 font-mono text-[12px] leading-4 text-[var(--openclaw-cta)] ${SKILL_CHIP}`}
             >
               {skill.label}
             </span>
@@ -104,15 +107,15 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
           {claw.tools?.loadout.map((tool) => (
             <span
               key={tool.id}
-              className="inline-flex h-5 items-center gap-1 rounded-[8px] border border-[rgba(235,194,61,0.5)] bg-[rgba(235,194,61,0.15)] px-2 font-mono text-[11px] leading-4 text-[var(--openclaw-cta)]"
+              className={`inline-flex h-5 items-center rounded-[8px] border px-2 font-mono text-[12px] leading-4 text-[var(--openclaw-cta)] ${TOOL_CHIP}`}
             >
               {tool.label}
             </span>
           ))}
           {specimen && (
             <span
-              className={`inline-flex h-5 items-center rounded-[8px] border px-2 font-mono text-[11px] leading-4 text-[var(--openclaw-cta)] ${
-                BREED_STATE_STYLES[specimen.breedState] ?? 'border-white/20 bg-white/10'
+              className={`inline-flex h-5 items-center rounded-[8px] border px-2 font-mono text-[12px] leading-4 text-[var(--openclaw-cta)] ${
+                BREED_STATE_CHIP[specimen.breedState] ?? 'border-white/20 bg-white/10'
               }`}
             >
               {specimen.breedState}
@@ -121,6 +124,7 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
         </div>
       </div>
 
+      {/* Select button */}
       <button
         type="button"
         onClick={onSelect}
@@ -133,7 +137,7 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
       >
         {selected ? 'Deselect' : 'Select for breeding'}
       </button>
-    </div>
+    </motion.div>
   );
 }
 
@@ -156,8 +160,16 @@ export function Nursery({ claws, specimens, selectedIds, onSelect, onContinue }:
     });
   }, [claws, specimenMap, ownershipFilter, breedFilter]);
 
+  const filterButtonClass = (active: boolean) =>
+    `rounded-[8px] border px-3 py-1 font-mono text-[11px] transition-colors ${
+      active
+        ? 'border-white/30 bg-white/15 text-white'
+        : 'border-white/10 text-[var(--openclaw-muted)] hover:border-white/25 hover:text-white'
+    }`;
+
   return (
     <section className="space-y-4">
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="jp-pill">{selectedIds.length}/2 selected</span>
@@ -185,8 +197,14 @@ export function Nursery({ claws, specimens, selectedIds, onSelect, onContinue }:
         </div>
       </div>
 
+      {/* Filters panel */}
       {showFilters && (
-        <div className="jp-card flex flex-wrap gap-6 p-4">
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="jp-card flex flex-wrap gap-6 p-4"
+        >
           <div>
             <div className="jp-label mb-2">Ownership</div>
             <div className="flex flex-wrap gap-2">
@@ -195,11 +213,7 @@ export function Nursery({ claws, specimens, selectedIds, onSelect, onContinue }:
                   key={value}
                   type="button"
                   onClick={() => setOwnershipFilter(value)}
-                  className={`rounded-[8px] border px-3 py-1 font-mono text-[11px] transition-colors ${
-                    ownershipFilter === value
-                      ? 'border-white/30 bg-white/15 text-white'
-                      : 'border-white/10 text-[var(--openclaw-muted)] hover:border-white/25 hover:text-white'
-                  }`}
+                  className={filterButtonClass(ownershipFilter === value)}
                   style={ownershipFilter === value ? undefined : { background: 'transparent' }}
                 >
                   {label}
@@ -215,11 +229,7 @@ export function Nursery({ claws, specimens, selectedIds, onSelect, onContinue }:
                   key={value}
                   type="button"
                   onClick={() => setBreedFilter(value)}
-                  className={`rounded-[8px] border px-3 py-1 font-mono text-[11px] transition-colors ${
-                    breedFilter === value
-                      ? 'border-white/30 bg-white/15 text-white'
-                      : 'border-white/10 text-[var(--openclaw-muted)] hover:border-white/25 hover:text-white'
-                  }`}
+                  className={filterButtonClass(breedFilter === value)}
                   style={breedFilter === value ? undefined : { background: 'transparent' }}
                 >
                   {label}
@@ -227,16 +237,18 @@ export function Nursery({ claws, specimens, selectedIds, onSelect, onContinue }:
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
+      {/* Empty state */}
       {filtered.length === 0 && (
         <div className="jp-card p-8 text-center font-mono text-[var(--openclaw-muted)]">
           No specimens match your filters.
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Grid — matches AgentListingCard grid pattern */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filtered.map((claw) => (
           <SpecimenCard
             key={claw.id}

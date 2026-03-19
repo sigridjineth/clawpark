@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { ArrowRight, Dna, Inbox, Package, Users, Zap } from 'lucide-react';
 import type { HomePayload, SuggestedAction } from '../../types/home';
 import type { Screen } from '../../types/claw';
@@ -10,8 +11,13 @@ interface HomeProps {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[10px] border border-white/10 px-4 py-3" style={{ background: 'var(--openclaw-glass)' }}>
-      <div className="font-mono text-[10px] uppercase tracking-[0.35em] text-[var(--openclaw-muted)]">{label}</div>
+    <div
+      className="rounded-[10px] border border-white/10 px-4 py-3"
+      style={{ background: 'var(--openclaw-glass)' }}
+    >
+      <div className="font-mono text-[10px] uppercase tracking-[0.35em] text-[var(--openclaw-muted)]">
+        {label}
+      </div>
       <div className="mt-2 font-display text-3xl text-white">{value}</div>
     </div>
   );
@@ -24,13 +30,28 @@ const ACTION_ICONS: Record<SuggestedAction['screen'], React.ReactNode> = {
   exchange: <Users className="h-5 w-5" />,
 };
 
+const stagger = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.07,
+    },
+  },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
+
 export function Home({ homePayload, loading, onNavigate }: HomeProps) {
   if (loading) {
     return (
       <section className="space-y-4">
         <div className="jp-card p-5">
-          <div className="h-8 w-48 animate-pulse rounded-md bg-jungle-800" />
-          <div className="mt-3 h-4 w-full animate-pulse rounded-md bg-jungle-800" />
+          <div className="h-4 w-24 animate-pulse rounded-md bg-white/10" />
+          <div className="mt-3 h-12 w-64 animate-pulse rounded-md bg-white/10" />
+          <div className="mt-2 h-4 w-80 animate-pulse rounded-md bg-white/10" />
         </div>
       </section>
     );
@@ -45,21 +66,63 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
       ]
     : [];
 
+  const defaultActions: Array<{
+    label: string;
+    description: string;
+    screen: Screen;
+    icon: React.ReactNode;
+    cta: string;
+  }> = [
+    {
+      label: 'Import',
+      description: 'Upload a .zip workspace exported from OpenClaw to add a specimen to your nursery.',
+      screen: 'import',
+      icon: <Inbox className="h-5 w-5" />,
+      cta: 'Import specimens',
+    },
+    {
+      label: 'Nursery',
+      description: 'Browse your collection and select two specimens to send to the Lab.',
+      screen: 'nursery',
+      icon: <Package className="h-5 w-5" />,
+      cta: 'Browse collection',
+    },
+    {
+      label: 'Lab',
+      description: 'Combine two selected specimens into a new child with inherited traits.',
+      screen: 'breedLab',
+      icon: <Dna className="h-5 w-5" />,
+      cta: 'Enter lab',
+    },
+  ];
+
   return (
-    <section className="space-y-4">
-      {/* Header card */}
-      <div className="jp-card p-5">
+    <motion.section
+      className="space-y-4"
+      variants={stagger}
+      initial="hidden"
+      animate="show"
+    >
+      {/* Hero card */}
+      <motion.div variants={fadeUp} className="jp-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="jp-label">Control room</div>
-            <h2 className="mt-1 font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">ClawPark</h2>
+            <h2 className="mt-1 font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">
+              ClawPark
+            </h2>
             <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--openclaw-muted)]">
-              Breed, evolve, and trade your specimens.
+              Buy, sell, and synthesize OpenClaw agents in a living ecosystem of intelligence.
             </p>
           </div>
           {homePayload?.connected_identity && (
-            <div className="rounded-[10px] border border-white/10 px-4 py-3 text-sm" style={{ background: 'var(--openclaw-glass)' }}>
-              <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--openclaw-muted)]">Discord</div>
+            <div
+              className="rounded-[10px] border border-white/10 px-4 py-3 text-sm"
+              style={{ background: 'var(--openclaw-glass)' }}
+            >
+              <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--openclaw-muted)]">
+                Discord
+              </div>
               <div className="mt-1 font-mono font-semibold text-white">
                 {homePayload.connected_identity.discordHandle}
               </div>
@@ -67,7 +130,7 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
           )}
         </div>
 
-        {/* Stats */}
+        {/* Stats grid */}
         {homePayload && (
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {stats.map((stat) => (
@@ -75,19 +138,21 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
-      {/* CTA */}
+      {/* What to do next */}
       {homePayload?.what_to_do_next && (
-        <div className="jp-card flex items-center gap-4 p-5">
+        <motion.div variants={fadeUp} className="jp-card flex items-center gap-4 p-5">
           <Zap className="h-5 w-5 shrink-0 text-white/60" />
-          <p className="flex-1 font-mono text-sm text-[var(--openclaw-muted)]">{homePayload.what_to_do_next}</p>
-        </div>
+          <p className="flex-1 font-mono text-sm text-[var(--openclaw-muted)]">
+            {homePayload.what_to_do_next}
+          </p>
+        </motion.div>
       )}
 
-      {/* Suggested actions */}
+      {/* Suggested actions from server */}
       {homePayload && homePayload.suggested_actions.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <motion.div variants={fadeUp} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[...homePayload.suggested_actions]
             .sort((a, b) => a.priority - b.priority)
             .map((action) => (
@@ -100,28 +165,26 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
               >
                 <div className="flex items-center gap-3">
                   <span className="text-white/50">{ACTION_ICONS[action.screen]}</span>
-                  <span className="font-display text-[24px] leading-6 text-white">{action.label}</span>
+                  <span className="font-display text-[24px] leading-6 text-white">
+                    {action.label}
+                  </span>
                 </div>
-                <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">{action.description}</p>
-                <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] group-hover:text-white transition-colors">
+                <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
+                  {action.description}
+                </p>
+                <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] transition-colors group-hover:text-white">
                   {action.cta}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
               </button>
             ))}
-        </div>
+        </motion.div>
       )}
 
-      {/* Empty state when no server */}
+      {/* Default actions when no server data */}
       {!homePayload && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {(
-            [
-              { label: 'Import', description: 'Upload a ZIP to add specimens', screen: 'import' as Screen, icon: <Inbox className="h-5 w-5" /> },
-              { label: 'Nursery', description: 'Browse and select your collection', screen: 'nursery' as Screen, icon: <Package className="h-5 w-5" /> },
-              { label: 'Lab', description: 'Combine two specimens into a child', screen: 'breedLab' as Screen, icon: <Dna className="h-5 w-5" /> },
-            ] as { label: string; description: string; screen: Screen; icon: React.ReactNode }[]
-          ).map((item) => (
+        <motion.div variants={fadeUp} className="grid gap-4 sm:grid-cols-3">
+          {defaultActions.map((item) => (
             <button
               key={item.screen}
               type="button"
@@ -133,15 +196,17 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
                 <span className="text-white/50">{item.icon}</span>
                 <span className="font-display text-[24px] leading-6 text-white">{item.label}</span>
               </div>
-              <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">{item.description}</p>
-              <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] group-hover:text-white transition-colors">
-                Enter
+              <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
+                {item.description}
+              </p>
+              <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] transition-colors group-hover:text-white">
+                {item.cta}
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
-    </section>
+    </motion.section>
   );
 }

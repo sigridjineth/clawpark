@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, CheckCircle, FileUp, Upload, X } from 'lucide-react';
 import type { ImportPreview } from '../../types/specimen';
 
@@ -29,7 +30,6 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
       setError(null);
       setBusy(true);
       try {
-        // Import first file for preview (API processes one at a time)
         await onImport(target[0], discordUserId);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Import failed.');
@@ -74,21 +74,25 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
 
   return (
     <section className="space-y-4">
+      {/* Header card */}
       <div className="jp-card p-5">
         <div className="jp-label">Specimen import</div>
-        <h2 className="mt-1 font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">Import OpenClaw</h2>
+        <h2 className="mt-1 font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">
+          Import OpenClaw
+        </h2>
         <p className="mt-2 font-mono text-sm text-[var(--openclaw-muted)]">
           Upload a .zip workspace exported from OpenClaw to add a specimen to your nursery.
         </p>
       </div>
 
       {/* Drop zone */}
-      <div
+      <motion.div
         className={`flex flex-col items-center gap-4 rounded-[10px] border-2 border-dashed p-10 text-center transition-colors ${
           dragOver
             ? 'border-white/40 bg-white/5'
-            : 'border-white/10 hover:border-white/25'
+            : 'border-white/10 hover:border-white/20'
         }`}
+        animate={{ borderColor: dragOver ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)' }}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
@@ -105,7 +109,7 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
           disabled={busy}
         >
           <Upload className="h-4 w-4" />
-          Choose files
+          {busy ? 'Processing…' : 'Choose files'}
         </button>
         <input
           ref={fileInputRef}
@@ -124,125 +128,164 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
-      {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
+      {/* Error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="flex items-start gap-3 rounded-[10px] border border-[rgba(235,61,61,0.4)] bg-[rgba(235,61,61,0.12)] px-4 py-3 font-mono text-sm text-[rgba(235,100,100,1)]"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Import preview */}
-      {importPreview && claw && (
-        <div className="jp-card space-y-4 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="jp-label">Import preview</div>
-              <h3 className="mt-1 font-display text-[28px] leading-6 text-white">{claw.name}</h3>
-              <div className="mt-1 font-mono text-[10px] text-[var(--openclaw-muted)]">{claw.archetype}</div>
-            </div>
-            <button type="button" onClick={onClearPreview} className="text-[var(--openclaw-muted)] hover:text-white">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {claw.identity && (
-              <div className="rounded-[8px] border border-white/10 p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
-                <div className="jp-label">Identity</div>
-                <p className="mt-2 font-mono text-sm text-[var(--openclaw-text)]">
-                  {claw.identity.emoji} {claw.identity.creature} — {claw.identity.vibe}
-                </p>
-                <p className="mt-1 font-mono text-xs text-[var(--openclaw-muted)]">{claw.identity.directive}</p>
+      <AnimatePresence>
+        {importPreview && claw && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="jp-card space-y-4 p-5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="jp-label">Import preview</div>
+                <h3 className="mt-1 font-display text-[28px] leading-6 text-white">{claw.name}</h3>
+                <div className="mt-1 font-mono text-[10px] text-[var(--openclaw-muted)]">
+                  {claw.archetype}
+                </div>
               </div>
-            )}
-
-            <div className="rounded-[8px] border border-white/10 p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
-              <div className="jp-label">Soul traits</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {claw.soul.traits.map((trait) => (
-                  <span
-                    key={trait.id}
-                    className="inline-flex h-5 items-center rounded-[6px] border border-white/20 bg-white/10 px-2 font-mono text-[11px] text-[var(--openclaw-cta)]"
-                  >
-                    {trait.label}
-                  </span>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={onClearPreview}
+                className="text-[var(--openclaw-muted)] transition-colors hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            <div className="rounded-[8px] border border-white/10 p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
-              <div className="jp-label">Skills</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {claw.skills.badges.map((skill) => (
-                  <span
-                    key={skill.id}
-                    className="inline-flex h-5 items-center rounded-[6px] border border-[rgba(61,151,235,0.5)] bg-[rgba(61,151,235,0.15)] px-2 font-mono text-[11px] text-[var(--openclaw-cta)]"
-                  >
-                    {skill.icon} {skill.label}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {claw.identity && (
+                <div
+                  className="rounded-[8px] border border-white/10 p-3"
+                  style={{ background: 'rgba(0,0,0,0.2)' }}
+                >
+                  <div className="jp-label">Identity</div>
+                  <p className="mt-2 font-mono text-sm text-[var(--openclaw-text)]">
+                    {claw.identity.emoji} {claw.identity.creature} — {claw.identity.vibe}
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-[var(--openclaw-muted)]">
+                    {claw.identity.directive}
+                  </p>
+                </div>
+              )}
 
-            {claw.tools && (
-              <div className="rounded-[8px] border border-white/10 p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
-                <div className="jp-label">Tools</div>
+              <div
+                className="rounded-[8px] border border-white/10 p-3"
+                style={{ background: 'rgba(0,0,0,0.2)' }}
+              >
+                <div className="jp-label">Soul traits</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {claw.tools.loadout.map((tool) => (
+                  {claw.soul.traits.map((trait) => (
                     <span
-                      key={tool.id}
-                      className="inline-flex h-5 items-center rounded-[6px] border border-[rgba(235,194,61,0.5)] bg-[rgba(235,194,61,0.15)] px-2 font-mono text-[11px] text-[var(--openclaw-cta)]"
+                      key={trait.id}
+                      className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(171,114,255,0.65)] bg-[rgba(171,114,255,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
                     >
-                      {tool.icon} {tool.label}
+                      {trait.label}
                     </span>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Warnings */}
-          {record && record.warnings.length > 0 && (
-            <div className="rounded-[8px] border border-white/20 p-3" style={{ background: 'rgba(255,255,255,0.05)' }}>
-              <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--openclaw-muted)]">
-                Warnings
+              <div
+                className="rounded-[8px] border border-white/10 p-3"
+                style={{ background: 'rgba(0,0,0,0.2)' }}
+              >
+                <div className="jp-label">Skills</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {claw.skills.badges.map((skill) => (
+                    <span
+                      key={skill.id}
+                      className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(61,151,235,0.65)] bg-[rgba(61,151,235,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                    >
+                      {skill.icon} {skill.label}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <ul className="space-y-1">
-                {record.warnings.map((w, i) => (
-                  // eslint-disable-next-line react/no-array-index-key
-                  <li key={i} className="flex items-start gap-2 font-mono text-xs text-[var(--openclaw-muted)]">
-                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                    {w}
-                  </li>
-                ))}
-              </ul>
+
+              {claw.tools && (
+                <div
+                  className="rounded-[8px] border border-white/10 p-3"
+                  style={{ background: 'rgba(0,0,0,0.2)' }}
+                >
+                  <div className="jp-label">Tools</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {claw.tools.loadout.map((tool) => (
+                      <span
+                        key={tool.id}
+                        className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(235,194,61,0.65)] bg-[rgba(235,194,61,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                      >
+                        {tool.icon} {tool.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Provenance */}
-          <div className="rounded-[8px] border border-white/10 px-3 py-2 font-mono text-xs text-[var(--openclaw-muted)]" style={{ background: 'rgba(0,0,0,0.2)' }}>
-            <span className="text-[var(--openclaw-text)]">Provenance: </span>
-            {importPreview.specimen.provenance.badge}
-            {importPreview.specimen.provenance.importedFrom
-              ? ` · from ${importPreview.specimen.provenance.importedFrom}`
-              : ''}
-          </div>
+            {/* Warnings */}
+            {record && record.warnings.length > 0 && (
+              <div
+                className="rounded-[8px] border border-white/20 p-3"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              >
+                <div className="mb-2 jp-label">Warnings</div>
+                <ul className="space-y-1">
+                  {record.warnings.map((w, i) => (
+                    // eslint-disable-next-line react/no-array-index-key
+                    <li key={i} className="flex items-start gap-2 font-mono text-xs text-[var(--openclaw-muted)]">
+                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                      {w}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void handleClaim()}
-              className="jp-btn"
-              disabled={busy}
+            {/* Provenance */}
+            <div
+              className="rounded-[8px] border border-white/10 px-3 py-2 font-mono text-xs text-[var(--openclaw-muted)]"
+              style={{ background: 'rgba(0,0,0,0.2)' }}
             >
-              <CheckCircle className="h-4 w-4" />
-              {busy ? 'Claiming…' : 'Claim specimen'}
-            </button>
-          </div>
-        </div>
-      )}
+              <span className="text-[var(--openclaw-text)]">Provenance: </span>
+              {importPreview.specimen.provenance.badge}
+              {importPreview.specimen.provenance.importedFrom
+                ? ` · from ${importPreview.specimen.provenance.importedFrom}`
+                : ''}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void handleClaim()}
+                className="jp-btn"
+                disabled={busy}
+              >
+                <CheckCircle className="h-4 w-4" />
+                {busy ? 'Claiming…' : 'Claim specimen'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
