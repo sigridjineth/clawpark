@@ -7,7 +7,6 @@ import * as api from '../services/clawparkApi';
 import type { HomePayload } from '../types/home';
 import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
 import type { ImportPreview, Specimen } from '../types/specimen';
-import { DEMO_PARENT_IDS, DEMO_SEED, resolveBreedSeed } from '../utils/demoMode';
 
 interface ClawStore {
   // Server state
@@ -45,11 +44,7 @@ interface ClawStore {
   screen: Screen;
   setScreen: (screen: Screen) => void;
 
-  demoMode: boolean;
   breedCount: number;
-  toggleDemoMode: () => void;
-  setDemoMode: (value: boolean) => void;
-  loadDemoPair: () => void;
 
   // API actions
   fetchHome: () => Promise<void>;
@@ -85,7 +80,6 @@ export function createInitialStoreState() {
     breedResult: null as BreedResult | null,
     birthPhase: 'merge' as BirthPhase,
     screen: 'home' as Screen,
-    demoMode: false,
     breedCount: 0,
   };
 }
@@ -127,7 +121,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
         selectedClaws[0],
         selectedClaws[1],
         state.preferredTraitId ?? undefined,
-        state.demoMode,
+        false,
       );
     const conversation = buildBreedingConversation({
       parentA: selectedClaws[0],
@@ -157,7 +151,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
         selectedClaws[0],
         selectedClaws[1],
         state.preferredTraitId ?? undefined,
-        state.demoMode,
+        false,
       ),
     });
   },
@@ -173,19 +167,10 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       parentA: selectedClaws[0],
       parentB: selectedClaws[1],
       preferredTraitId: state.preferredTraitId ?? undefined,
-      demoMode: state.demoMode,
       breedCount: state.breedCount,
       breedPrompt: state.breedPrompt,
       breedingConversation: state.breedingConversation,
-      seed: state.demoMode
-        ? DEMO_SEED + state.breedCount
-        : resolveBreedSeed(
-            selectedClaws[0].id,
-            selectedClaws[1].id,
-            state.preferredTraitId ?? undefined,
-            state.demoMode,
-            state.breedCount,
-          ),
+      seed: Date.now() + state.breedCount,
     });
 
     set((current) => ({
@@ -239,16 +224,6 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   setBirthPhase: (phase) => set({ birthPhase: phase }),
   setScreen: (screen) => set({ screen }),
 
-  toggleDemoMode: () => set((state) => ({ demoMode: !state.demoMode })),
-  setDemoMode: (value) => set({ demoMode: value }),
-
-  loadDemoPair: () => {
-    const state = get();
-    const demoIds = DEMO_PARENT_IDS.filter((id) => state.claws.some((claw) => claw.id === id));
-    if (demoIds.length !== 2) return;
-    set({ selectedIds: [...demoIds] });
-    get().computePrediction();
-  },
 
   // API actions
   fetchHome: async () => {

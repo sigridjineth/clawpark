@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @font-face {
   font-family: 'Ndot57';
   src: url('/fonts/Ndot57-Regular.otf') format('opentype');
@@ -5,8 +7,6 @@
   font-style: normal;
   font-display: swap;
 }
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;

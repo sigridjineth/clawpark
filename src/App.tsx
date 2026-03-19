@@ -9,7 +9,6 @@ import { LineageGraph } from './components/Lineage/LineageGraph';
 import { Nursery } from './components/Nursery/Nursery';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
 import type { Claw, Screen } from './types/claw';
-import { attachDemoShortcut, isDemoModeFromSearch, updateDemoModeQuery } from './utils/demoMode';
 
 const NAV_SCREENS: Array<{ screen: Screen; label: string }> = [
   { screen: 'home', label: 'Home' },
@@ -153,10 +152,6 @@ function App() {
     addChildToGallery,
     birthPhase,
     setBirthPhase,
-    demoMode,
-    toggleDemoMode,
-    setDemoMode,
-    loadDemoPair,
     homePayload,
     importPreview,
     fetchHome,
@@ -168,21 +163,6 @@ function App() {
   const [homeLoading, setHomeLoading] = useState(true);
 
   const selectedClaws = useMemo(() => getSelectedClaws(claws, selectedIds), [claws, selectedIds]);
-
-  useEffect(() => {
-    setDemoMode(isDemoModeFromSearch());
-    return attachDemoShortcut(toggleDemoMode);
-  }, [setDemoMode, toggleDemoMode]);
-
-  useEffect(() => {
-    updateDemoModeQuery(demoMode);
-  }, [demoMode]);
-
-  useEffect(() => {
-    if (demoMode && screen === 'nursery' && selectedIds.length === 0) {
-      loadDemoPair();
-    }
-  }, [demoMode, loadDemoPair, screen, selectedIds.length]);
 
   // Bootstrap data from server
   useEffect(() => {
@@ -228,21 +208,11 @@ function App() {
           <GlassNavbar activeScreen={screen} onNavigate={setScreen} />
         </nav>
 
-        {/* Right side: claw count + demo toggle */}
+        {/* Right side: specimen count */}
         <div className="pointer-events-auto absolute right-4 top-3.5 flex items-center gap-2 sm:top-4">
-          <span className="jp-pill">{claws.length}</span>
-          <button
-            type="button"
-            onClick={toggleDemoMode}
-            className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-3 py-2 font-mono text-[11px] transition-colors ${
-              demoMode
-                ? 'border-white/30 bg-white/15 text-white'
-                : 'border-white/10 text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
-            }`}
-            style={{ background: demoMode ? undefined : 'var(--openclaw-glass)' }}
-          >
-            Demo {demoMode ? 'On' : 'Off'}
-          </button>
+          <span className="inline-flex min-h-9 items-center justify-center rounded-[10px] border border-white/10 px-3 py-2 font-mono text-[11px] text-[var(--openclaw-muted)]" style={{ background: 'var(--openclaw-glass)' }}>
+            {claws.length} specimen{claws.length !== 1 ? 's' : ''}
+          </span>
         </div>
       </header>
 
