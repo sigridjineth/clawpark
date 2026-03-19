@@ -9,6 +9,7 @@ import { LineageGraph } from './components/Lineage/LineageGraph';
 import { Nursery } from './components/Nursery/Nursery';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
 import type { Claw, Screen } from './types/claw';
+import { attachDemoShortcut, isDemoModeFromSearch, updateDemoModeQuery } from './utils/demoMode';
 
 const NAV_SCREENS: Array<{ screen: Screen; label: string }> = [
   { screen: 'home', label: 'Home' },
@@ -31,7 +32,12 @@ function GlassNavbar({
   const listRef = useRef<HTMLUListElement>(null);
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [hovered, setHovered] = useState<Screen | null>(null);
-  const [indicatorStyle, setIndicatorStyle] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   const highlightedScreen = hovered ?? activeScreen;
@@ -78,7 +84,7 @@ function GlassNavbar({
         updateIndicator(activeScreen);
       }}
     >
-      {/* Animated indicator */}
+      {/* Framer-motion animated indicator */}
       {indicatorStyle && (
         <motion.span
           aria-hidden="true"
@@ -104,7 +110,9 @@ function GlassNavbar({
         return (
           <li key={screen}>
             <button
-              ref={(node) => { itemRefs.current[screen] = node; }}
+              ref={(node) => {
+                itemRefs.current[screen] = node;
+              }}
               type="button"
               onClick={() => onNavigate(screen)}
               onPointerEnter={() => {
@@ -113,9 +121,7 @@ function GlassNavbar({
               }}
               aria-current={isActive ? 'page' : undefined}
               className={`${itemBaseClass} bg-transparent ${
-                isHighlighted
-                  ? 'text-[var(--openclaw-text)]'
-                  : 'text-[var(--openclaw-muted)]'
+                isHighlighted ? 'text-[var(--openclaw-text)]' : 'text-[var(--openclaw-muted)]'
               }`}
             >
               {label}
@@ -147,6 +153,10 @@ function App() {
     addChildToGallery,
     birthPhase,
     setBirthPhase,
+    demoMode,
+    toggleDemoMode,
+    setDemoMode,
+    loadDemoPair,
     homePayload,
     importPreview,
     fetchHome,
@@ -158,6 +168,21 @@ function App() {
   const [homeLoading, setHomeLoading] = useState(true);
 
   const selectedClaws = useMemo(() => getSelectedClaws(claws, selectedIds), [claws, selectedIds]);
+
+  useEffect(() => {
+    setDemoMode(isDemoModeFromSearch());
+    return attachDemoShortcut(toggleDemoMode);
+  }, [setDemoMode, toggleDemoMode]);
+
+  useEffect(() => {
+    updateDemoModeQuery(demoMode);
+  }, [demoMode]);
+
+  useEffect(() => {
+    if (demoMode && screen === 'nursery' && selectedIds.length === 0) {
+      loadDemoPair();
+    }
+  }, [demoMode, loadDemoPair, screen, selectedIds.length]);
 
   // Bootstrap data from server
   useEffect(() => {
@@ -203,11 +228,21 @@ function App() {
           <GlassNavbar activeScreen={screen} onNavigate={setScreen} />
         </nav>
 
-        {/* Right side: specimen count */}
+        {/* Right side: claw count + demo toggle */}
         <div className="pointer-events-auto absolute right-4 top-3.5 flex items-center gap-2 sm:top-4">
-          <span className="inline-flex min-h-9 items-center justify-center rounded-[10px] border border-white/10 px-3 py-2 font-mono text-[11px] text-[var(--openclaw-muted)]" style={{ background: 'var(--openclaw-glass)' }}>
-            {claws.length} specimen{claws.length !== 1 ? 's' : ''}
-          </span>
+          <span className="jp-pill">{claws.length}</span>
+          <button
+            type="button"
+            onClick={toggleDemoMode}
+            className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-3 py-2 font-mono text-[11px] transition-colors ${
+              demoMode
+                ? 'border-white/30 bg-white/15 text-white'
+                : 'border-white/10 text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
+            }`}
+            style={{ background: demoMode ? undefined : 'var(--openclaw-glass)' }}
+          >
+            Demo {demoMode ? 'On' : 'Off'}
+          </button>
         </div>
       </header>
 
@@ -223,11 +258,7 @@ function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <Home
-                  homePayload={homePayload}
-                  loading={homeLoading}
-                  onNavigate={setScreen}
-                />
+                <Home homePayload={homePayload} loading={homeLoading} onNavigate={setScreen} />
               </motion.div>
             )}
 
@@ -275,36 +306,7 @@ function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <Connect
-                  connectedIdentity={homePayload?.connected_identity ?? null}
-                />
-              </motion.div>
-            )}
-
-            {screen === 'breedLab' && (!parentPair || !prediction) && (
-              <motion.div
-                key="breedLab-empty"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
-              >
-                <section className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-                  <h1 className="font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">
-                    Breed Lab
-                  </h1>
-                  <p className="mt-4 max-w-[600px] font-mono text-[clamp(0.95rem,1.8vw,1.1rem)] text-[var(--openclaw-muted)]">
-                    Select two specimens from the Nursery to begin breeding. Each parent contributes traits, skills, and tools to the child.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setScreen('nursery')}
-                    className="mt-8 inline-flex min-h-9 items-center justify-center rounded-[10px] border border-[var(--openclaw-border)] px-6 py-2 font-mono text-sm text-[var(--openclaw-cta)] hover:bg-white/15 hover:text-white"
-                    style={{ background: 'var(--openclaw-glass)' }}
-                  >
-                    Go to Nursery
-                  </button>
-                </section>
+                <Connect connectedIdentity={homePayload?.connected_identity ?? null} />
               </motion.div>
             )}
 
@@ -363,7 +365,11 @@ function App() {
                   <div className="jp-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                     <h2 className="font-display text-3xl text-white">Lineage</h2>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setScreen('birth')} className="jp-btn-secondary">
+                      <button
+                        type="button"
+                        onClick={() => setScreen('birth')}
+                        className="jp-btn-secondary"
+                      >
                         Back
                       </button>
                       <button type="button" onClick={addChildToGallery} className="jp-btn">

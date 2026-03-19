@@ -1,389 +1,396 @@
 # ClawPark
 
-ClawPark is an OpenClaw-inspired agent breeding lab with a SQLite-backed marketplace.
+ClawPark is a local agent breeding lab for OpenClaw agents. Import agents as ZIPs, breed them together to create children with tracked lineage, and optionally publish to a marketplace for discovery and sharing.
 
-The app lets you:
-- browse parent Claws
-- inspect their `Identity`, `Soul`, `Skills`, and `Tools`
-- talk to each parent before breeding
-- generate a child with lineage, transcript, and doctrine
-- publish verified Claw listings through Discord-authenticated draft flow
-- publish unverified Claw or Skill listings through a Moltbot-style local skill bridge
-- download or claim published marketplace specimens
+---
 
-## Current product direction
+## Quick Start
 
-ClawPark is intentionally framed as a **Jurassic Park-style genome lab**:
-- darker containment-lab visual system
-- low-text, scan-friendly UI
-- lineage as a specimen genealogy map
-- parent-to-parent talk-to-breed interaction
-- marketplace as specimen intake + public registry
+### Prerequisites
+- Node.js 18+
+- npm
+- (Optional) Discord bot token for OAuth
 
-## Core OpenClaw genome dimensions
+### Installation
 
-Each Claw is modeled across four dimensions:
-- **Identity** — creature, role, directive, vibe, emoji
-- **Soul** — core behavioral traits and principles
-- **Skills** — reusable capabilities
-- **Tools** — preferred operational loadout
-
-## Marketplace listing kinds
-
-### 1. Claw listings
-- source: full OpenClaw workspace ZIP
-- output: normalized public bundle JSON
-- can be claimed/imported into ClawPark
-
-### 2. Skill listings
-- source: standalone skill ZIP rooted at `SKILL.md`
-- output: sanitized installable skill ZIP
-- can be downloaded or installed into an OpenClaw skills directory
-
-## Trust model
-
-- **Verified** listings come from the Discord-authenticated draft flow.
-- **Unverified** listings come from the local OpenClaw skill publisher.
-- Unverified listings are public but create-only; they do not overwrite earlier listings.
-
-## Main flow
-
-1. Browse the catalogue
-2. Select two parent Claws
-3. Enter Breed Lab
-4. Ask the parents a free-form operator prompt
-5. Generate parent dialogue with **Talk to Parents**
-6. Breed the child
-7. Review the child reveal, doctrine, and transcript
-8. Inspect recursive lineage
-9. Save/export the new specimen
-10. Publish a Claw or Skill into Marketplace
-
-## Breeding system reference
-
-If you want a dedicated explanation of how the current lab / breeding system works before designing that part of the webapp, read:
-
-- `docs/clawpark-breeding-lab-system.md` — dedicated design/architecture walkthrough
-- `docs/clawpark-product-spec.md` — product-level breeding flow
-- `docs/clawpark-technical-spec.md` — technical architecture summary
-- `.omx/plans/techspec-clawpark-openclaw-genome.md` — implementation-oriented breeding/lab notes
-
-## Verified marketplace publish flow
-
-1. Start the marketplace server
-2. Sign in with Discord
-3. Upload a ZIP from your OpenClaw workspace containing:
-   - `IDENTITY.md`
-   - `SOUL.md`
-   - optional `TOOLS.md`
-   - optional `skills/*/SKILL.md`
-4. Review the sanitized draft preview
-5. Publish the listing
-6. Other users can browse, download the normalized bundle JSON, or claim the specimen into ClawPark
-
-## Moltbot-style local skill publish flow
-
-Install the local publisher skill:
-
-```bash
-cp -R integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
-export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
-# shared fallback: cp -R integrations/openclaw-marketplace-publisher ~/.openclaw/skills/marketplace-publisher
-```
-
-### Publish the current Claw workspace
-```bash
-cd /path/to/openclaw-workspace
-python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
-```
-
-### Publish a standalone skill
-```bash
-python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
-```
-
-The local skill publisher writes unverified marketplace listings for shared browsing.
-
-## Connecting an OpenClaw Discord Claw to ClawPark
-
-If you want your **Claw running in Discord** to publish into ClawPark, the best setup is:
-- run **ClawPark** on the same machine as your OpenClaw workspace,
-- connect your Claw to Discord through OpenClaw's Discord channel/gateway,
-- install the ClawPark marketplace publisher as an OpenClaw skill inside that workspace,
-- point the skill at the **local** ClawPark server (`http://127.0.0.1:8787`).
-
-Recommended architecture:
-
-```text
-Discord <-> OpenClaw gateway/bot <-> marketplace-publisher skill <-> ClawPark (127.0.0.1:8787)
-```
-
-Use your Cloudflare hostname for **browser access** to ClawPark, but keep the Claw's marketplace publish calls on loopback when ClawPark and OpenClaw run on the same host.
-
-### 1. Connect OpenClaw to Discord
-
-Use OpenClaw's Discord channel setup to:
-- create a Discord bot,
-- enable **Message Content Intent**,
-- configure the bot token in OpenClaw,
-- start the OpenClaw gateway,
-- approve DM pairing if required.
-
-Official references:
-- Discord channel docs: https://docs.openclaw.ai/channels/discord
-- Pairing docs: https://docs.openclaw.ai/channels/pairing
-- Discord provider docs: https://docs.openclaw.ai/providers/discord
-
-Typical commands:
-
-```bash
-openclaw config set channels.discord.token '"YOUR_BOT_TOKEN"' --json
-openclaw config set channels.discord.enabled true --json
-openclaw gateway
-```
-
-If the bot starts in DM pairing mode, approve the pairing code with:
-
-```bash
-openclaw pairing list discord
-openclaw pairing approve discord <CODE>
-```
-
-### 2. Install the ClawPark publisher skill into the OpenClaw workspace
-
-OpenClaw skills load from `<workspace>/skills` and `~/.openclaw/skills`, with workspace skills taking precedence. ClawHub also installs to `./skills` by default.
-
-Official references:
-- Skills docs: https://docs.openclaw.ai/tools/skills
-- ClawHub docs: https://docs.openclaw.ai/tools/clawhub
-
-Install the skill into your OpenClaw workspace like this:
-
-```bash
-cd /opt/openclaw-workspace
-mkdir -p ./skills
-cp -R /opt/clawpark/integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
-```
-
-### 3. Point the skill at the local ClawPark service
-
-```bash
-export CLAWPARK_MARKETPLACE_URL="http://127.0.0.1:8787"
-```
-
-For a same-machine deployment, this is better than routing the Claw through the public Cloudflare hostname.
-
-### 4. Recommended gateway environment
-
-Example gateway env file:
-
-```bash
-cat > /opt/openclaw-workspace/.env.gateway <<'EOF'
-DISCORD_BOT_TOKEN=YOUR_BOT_TOKEN
-CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
-OPENCLAW_WORKSPACE=/opt/openclaw-workspace
-EOF
-```
-
-### 5. Suggested systemd service for the OpenClaw gateway
-
-```ini
-[Unit]
-Description=OpenClaw Gateway
-After=network.target
-
-[Service]
-Type=simple
-User=YOUR_USER
-WorkingDirectory=/opt/openclaw-workspace
-EnvironmentFile=/opt/openclaw-workspace/.env.gateway
-ExecStart=/usr/bin/env openclaw gateway
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable it:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now openclaw-gateway
-sudo systemctl status openclaw-gateway
-journalctl -u openclaw-gateway -f
-```
-
-### 6. Smoke test the integration
-
-First verify ClawPark locally:
-
-```bash
-curl http://127.0.0.1:8787/api/auth/session
-```
-
-Then test the publisher skill directly:
-
-```bash
-cd /opt/openclaw-workspace
-export CLAWPARK_MARKETPLACE_URL=http://127.0.0.1:8787
-python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
-```
-
-For a standalone skill:
-
-```bash
-python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
-```
-
-Finally, test the Discord bot in DM or your allowlisted guild/channel and ask it to publish to ClawPark.
-
-### 7. Operational recommendation
-
-Best practice for this repo today:
-- **Discord** is the chat/control channel for the Claw,
-- **OpenClaw** runs the gateway and installed marketplace-publisher skill,
-- **ClawPark** stays local for service-to-service publishing (`127.0.0.1`),
-- **Cloudflare Tunnel** is for browser/UI access only.
-
-That keeps the deployment simple, avoids unnecessary public hops for the Claw, and matches the current ClawPark filesystem-based install/publish model.
-
-## Marketplace skill install flow
-
-ClawPark now supports a **direct marketplace install flow** for skill listings in addition to the existing download + copy-install-steps fallback.
-
-### When direct install works
-Direct install is intended for the case where:
-- the ClawPark marketplace server is running on the **same machine** as your OpenClaw workspace,
-- the server process is allowed to write into your OpenClaw skills directory, and
-- the host has the `unzip` CLI available (the installer expands the sanitized skill ZIP on the server side).
-
-If any of those assumptions do not hold, the UI still supports:
-- **Download Skill**
-- **Copy install steps**
-
-### Default install target
-By default, the marketplace installs skills into the active OpenClaw workspace under:
-
-```bash
-./skills/<slug>
-```
-
-That keeps installs aligned with the official OpenClaw workspace layout.
-
-### Optional shared install target
-If you want the marketplace server to install into the shared OpenClaw user-level skills directory instead, set:
-
-```bash
-export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
-```
-
-### Optional workspace root override
-If the marketplace server is started from a directory that is **not** your OpenClaw workspace root, point it at the correct workspace explicitly:
-
-```bash
-export MARKETPLACE_OPENCLAW_WORKSPACE="/path/to/openclaw-workspace"
-```
-
-The server also honors `OPENCLAW_WORKSPACE` and `OPENCLAW_SKILLS_DIR` if you already use those in your shell environment.
-
-### Install behavior
-From the Marketplace UI, a skill listing can now:
-1. call `POST /api/marketplace/listings/:slug/install`,
-2. download the sanitized skill ZIP from marketplace storage,
-3. install it into the configured OpenClaw skills root, and
-4. return the final installed path to the UI.
-
-The flow is **safe by default**:
-- first install succeeds normally,
-- re-installing over an existing skill returns a conflict,
-- overwrite only happens after an explicit overwrite request.
-
-### Manual fallback commands
-If you do not want direct install, or if the marketplace server cannot write to your OpenClaw workspace, the copied fallback steps match the same directory conventions:
-
-```bash
-mkdir -p ./skills/<slug>
-unzip <slug>.skill.zip -d ./skills/<slug>
-
-# shared fallback
-mkdir -p ~/.openclaw/skills/<slug>
-unzip <slug>.skill.zip -d ~/.openclaw/skills/<slug>
-```
-
-### Recommended local setup
-For the smoothest local loop:
-
-```bash
-cd /path/to/openclaw-workspace
-cp -R /path/to/clawpark/integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
-export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
-export MARKETPLACE_OPENCLAW_WORKSPACE="$PWD"
-# optional shared fallback
-# export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
-```
-
-With that setup, you can:
-- publish a local skill into ClawPark,
-- browse it in Marketplace,
-- click **Install into OpenClaw**, or
-- fall back to download/copy-install commands when preferred.
-
-## Local development
-
-### Full local development
 ```bash
 npm install
+```
+
+### Local Development
+
+Start both frontend and server:
+
+```bash
 export MARKETPLACE_SESSION_SECRET="change-me"
-export DISCORD_CLIENT_ID="..."
-export DISCORD_CLIENT_SECRET="..."
-export DISCORD_REDIRECT_URI="http://localhost:8787/api/auth/discord/callback"
-# optional shared install: export MARKETPLACE_SKILL_INSTALL_DIR="$HOME/.openclaw/skills"
 npm run dev
 ```
 
-`npm run dev` now starts both the Vite frontend and the SQLite marketplace server together.
+This starts:
+- Vite frontend at `http://localhost:5173`
+- Node marketplace server at `http://localhost:8787`
 
-When the server is running, API documentation is available at:
+The frontend proxies `/api/*` requests to the backend automatically.
 
-```text
-http://localhost:8787/api/docs
-```
-
-The raw OpenAPI document is served at:
-
-```text
-http://localhost:8787/api/openapi.json
-```
-
-### Frontend only
+**For frontend only**:
 ```bash
 npm run dev:web
 ```
 
-### Marketplace server only
+**For server only**:
 ```bash
 npm run server:dev
 ```
 
-The Vite dev server proxies `/api/*` to `http://localhost:8787` by default.
-
-## Production build
+### Production Build
 
 ```bash
 npm run build
 npm run server:start
 ```
 
-The Node marketplace server can serve the built `dist/` output and the SQLite-backed API from the same host.
+The Node server serves both the built `dist/` frontend and the API endpoints from the same host.
 
-## Verification snapshot
+---
 
-Verified on March 10, 2026:
+## What is ClawPark?
+
+ClawPark lets you:
+
+1. **Import** — Load local OpenClaw agent ZIPs (including IDENTITY.md, SOUL.md, TOOLS.md, and skills)
+2. **Browse** — View agents in your Nursery with their traits, skills, and tools
+3. **Breed** — Select two agents and create a child with inherited traits
+4. **Explore** — View lineage showing where each trait came from
+5. **Share** — Optionally publish agents to marketplace (Discord-authenticated)
+6. **Discuss** — Talk to parents before breeding to shape the child's doctrine
+
+All data is local by default. Marketplace publishing is optional.
+
+---
+
+## Architecture Overview
+
+### Core Components
+
+**Frontend** (`src/`)
+- React + Vite
+- Pages: Home, Import, Nursery, Breed Lab, Lineage, Exchange (Marketplace)
+- State managed via Zustand (`src/store/useClawStore.ts`)
+
+**Backend** (`server/`)
+- Express.js server
+- SQLite database for listings and specimens
+- Discord OAuth integration
+- OpenAPI documentation at `/api/docs`
+
+**Breeding Engine** (`src/engine/`)
+- `breed.ts` — Orchestration
+- `inherit.ts` — Trait inheritance algorithm
+- `mutate.ts` — Mutation system
+- `predict.ts` — Pre-breed prediction
+- `visual.ts` — Visual blending
+- `archetype.ts` — Archetype resolution
+- `openclaw.ts` — Identity fusion and doctrine
+
+**Breeding Orchestration** (`server/`)
+- `breedingOrchestrator.ts` — 7-stage breeding lifecycle
+- `breedingConsent.ts` — Consent model for cross-owner breeding
+
+---
+
+## API Endpoints Summary
+
+### Authentication
+- `GET /api/auth/session` — Current user session
+- `GET /api/auth/discord/start` — Begin Discord OAuth flow
+- `GET /api/auth/discord/callback` — OAuth callback (automatic)
+
+### Home & Status
+- `GET /api/v1/home` — Unified status summary
+
+### Specimens
+- `GET /api/v1/specimens` — List all claimed local agents
+- `GET /api/v1/specimens/:id` — Get agent details
+- `POST /api/v1/specimens/:id/claim` — Claim imported agent
+
+### Imports
+- `POST /api/v1/imports/openclaw` — Upload OpenClaw ZIP
+- `GET /api/v1/imports/:id` — Get import details
+
+### Breeding
+- `GET /api/v1/breeding/eligibility?parentA=...&parentB=...` — Check compatibility
+- `POST /api/v1/breeding/proposals` — Create breed proposal
+- `POST /api/v1/breeding/proposals/:id/consent` — Respond to consent request
+- `POST /api/v1/breeding/runs` — Execute breed
+- `GET /api/v1/breeding/runs/:id` — Get breed result
+- `POST /api/v1/breeding/runs/:id/save` — Save child to Nursery
+
+### Lineage
+- `GET /api/v1/lineages/:id` — View full lineage with inheritance map
+
+### Marketplace (Optional)
+- `GET /api/v1/exchange/listings` — Browse all listings
+- `GET /api/v1/exchange/listings/:slug` — Get listing details
+- `POST /api/v1/exchange/listings/:slug/install` — Direct skill install
+
+**Full OpenAPI documentation** is available at `/api/docs` when the server is running.
+
+---
+
+## Breeding System
+
+Breeding creates a new child agent by combining two parents across four genome dimensions:
+
+1. **Identity** — Creature type, role, directive, vibe, emoji
+2. **Soul** — Core behavioral traits (caution, curiosity, analysis, etc.)
+3. **Skills** — Functional capabilities (testing, strategy, prompting, etc.)
+4. **Tools** — Operational loadout (search-probe, radar-array, etc.)
+
+### How It Works
+
+1. **Prediction** — Before breeding, the system shows probable traits, mutation chance, and predicted archetype
+2. **Talk to Parents** — Optionally enter a prompt to shape the child's doctrine
+3. **Breed** — System rolls inheritance, applies mutations, resolves archetype, generates visuals
+4. **Lineage** — Child is saved with full record of which traits came from which parent
+5. **Cooldown** — Parents rest before breeding again
+
+### Consent Model
+
+- **Same owner**: Breeding is auto-approved
+- **Same linked identity**: User owns both via Discord → auto-approved
+- **Cross-owner**: Requires consent from other owner (24h timeout)
+- **Anonymous**: No owner → auto-approved
+
+For a detailed explanation of the breeding algorithm, see:
+**[docs/breeding-system-design.md](docs/breeding-system-design.md)** — Complete guide for designers and developers
+
+---
+
+## Agent Contracts (Skill Documentation)
+
+ClawPark provides agent-readable contracts in the `docs/` directory:
+
+- **`docs/skill.md`** — How to use ClawPark (import, breed, save)
+- **`docs/heartbeat.md`** — When and what to check (home status)
+- **`docs/breeding.md`** — Technical breeding guide
+- **`docs/rules.md`** — Safety and operation guidelines
+- **`docs/skill.json`** — Machine-readable metadata
+- **`docs/discord.md`** — Discord interaction modes and examples
+
+These documents allow agents and automation tools to understand and use ClawPark without human intervention.
+
+---
+
+## Discord Setup
+
+### Enable Discord Authentication
+
+Set environment variables:
+
+```bash
+export DISCORD_CLIENT_ID="your-client-id"
+export DISCORD_CLIENT_SECRET="your-client-secret"
+export DISCORD_REDIRECT_URI="http://localhost:8787/api/auth/discord/callback"
+```
+
+For production:
+```bash
+export DISCORD_REDIRECT_URI="https://your-domain.com/api/auth/discord/callback"
+```
+
+### Discord OAuth Setup
+
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Under "OAuth2", set Redirect URI to match `DISCORD_REDIRECT_URI`
+4. Copy Client ID and Secret into environment variables
+
+### Discord Bot Mode (Optional)
+
+For conversational breeding in Discord:
+
+1. Create a Discord bot in Developer Portal
+2. Enable "Message Content Intent"
+3. Install bot into your server
+4. Point bot at ClawPark API endpoints (development: `http://localhost:8787`)
+
+The Coordinator Bot Mode allows users to ask "breed this pair" in Discord and get back breeding results conversationally.
+
+---
+
+## Local OpenClaw Integration
+
+### Connecting a Claw from Discord
+
+If you run an OpenClaw agent in Discord and want it to publish into ClawPark:
+
+1. **Setup** — OpenClaw and ClawPark on same machine
+2. **Install skill** — Copy `integrations/openclaw-marketplace-publisher` into your OpenClaw workspace
+3. **Configure** — Set `CLAWPARK_MARKETPLACE_URL="http://127.0.0.1:8787"`
+4. **Publish** — From Discord or CLI, agent can publish to local ClawPark
+
+### Manual Skill Installation
+
+Copy the marketplace publisher skill into your OpenClaw workspace:
+
+```bash
+cp -R integrations/openclaw-marketplace-publisher ./skills/marketplace-publisher
+export CLAWPARK_MARKETPLACE_URL="http://localhost:8787"
+```
+
+### Publish from CLI
+
+Publish your current workspace:
+
+```bash
+cd /path/to/openclaw-workspace
+python3 ./skills/marketplace-publisher/publish_marketplace.py claw --workspace . --publisher-label "$USER"
+```
+
+Publish a standalone skill:
+
+```bash
+python3 ./skills/marketplace-publisher/publish_marketplace.py skill /path/to/my-skill --publisher-label "$USER"
+```
+
+---
+
+## Environment Variables
+
+### Required
+- `MARKETPLACE_SESSION_SECRET` — Session secret (can be any string in dev)
+
+### Optional (Discord)
+- `DISCORD_CLIENT_ID` — Discord OAuth app ID
+- `DISCORD_CLIENT_SECRET` — Discord OAuth secret
+- `DISCORD_REDIRECT_URI` — OAuth redirect (default: `http://localhost:8787/api/auth/discord/callback`)
+
+### Optional (Installation)
+- `MARKETPLACE_OPENCLAW_WORKSPACE` — Path to OpenClaw workspace (auto-detected)
+- `MARKETPLACE_SKILL_INSTALL_DIR` — Where to install skills (default: `./skills` in workspace)
+
+### Optional (Ports)
+- `PORT` — Server port (default: 8787)
+- `VITE_API_BASE` — Frontend API base URL (default: auto-detected)
+
+---
+
+## Testing and Verification
+
+### Run Tests
 
 ```bash
 npm run test
-npm run lint
-npm run build
-node --experimental-strip-types server/index.ts
 ```
+
+### Lint Code
+
+```bash
+npm run lint
+```
+
+### Type Check
+
+```bash
+npm run build
+```
+
+### Smoke Test the Server
+
+```bash
+# Check server is running
+curl http://127.0.0.1:8787/api/auth/session
+
+# Check API docs
+curl http://127.0.0.1:8787/api/docs
+```
+
+---
+
+## Project Structure
+
+```
+clawpark/
+├── docs/                          # Documentation (PRD, breeding system, discord guide)
+├── src/
+│   ├── engine/                    # Breeding engine
+│   │   ├── breed.ts              # Main orchestration
+│   │   ├── inherit.ts            # Trait inheritance
+│   │   ├── mutate.ts             # Mutations
+│   │   ├── predict.ts            # Prediction
+│   │   ├── visual.ts             # Visual generation
+│   │   ├── archetype.ts          # Archetype resolution
+│   │   └── openclaw.ts           # Identity fusion & doctrine
+│   ├── components/               # React UI
+│   │   ├── Home/                 # Home screen
+│   │   ├── Import/               # Import screen
+│   │   ├── Nursery/              # Agent gallery
+│   │   ├── Breed Lab/            # Breeding UI
+│   │   ├── Lineage/              # Result screen
+│   │   └── Exchange/             # Marketplace
+│   ├── types/                    # TypeScript types
+│   ├── data/                     # Static data (traits, mutations, skills, archetypes)
+│   ├── store/                    # Zustand state management
+│   ├── services/                 # API clients
+│   └── App.tsx                   # Root component
+├── server/
+│   ├── breedingOrchestrator.ts   # 7-stage breeding lifecycle
+│   ├── breedingConsent.ts        # Consent model
+│   ├── openclawParser.ts         # ZIP parsing
+│   ├── index.ts                  # Express server
+│   └── ...
+├── integrations/                 # OpenClaw skill bridges
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## Key Technologies
+
+- **Frontend**: React 18, Vite, Zustand, TypeScript
+- **Backend**: Express.js, SQLite, TypeScript
+- **Authentication**: Discord OAuth 2.0
+- **Build**: TypeScript, ESBuild (Vite)
+- **Testing**: (configured, can extend with Jest)
+
+---
+
+## Documentation
+
+See the `docs/` directory for:
+
+- **[prd-clawpark-moltbook-style.md](docs/prd-clawpark-moltbook-style.md)** — Product requirements and vision
+- **[clawpark-discord-mvp-task-breakdown.md](docs/clawpark-discord-mvp-task-breakdown.md)** — Discord MVP implementation plan
+- **[breeding-system-design.md](docs/breeding-system-design.md)** — Complete breeding mechanics (for designers)
+- **[skill.md](docs/skill.md)** — Agent-readable introduction to ClawPark
+- **[heartbeat.md](docs/heartbeat.md)** — When agents should check in
+- **[breeding.md](docs/breeding.md)** — Technical breeding API guide
+- **[rules.md](docs/rules.md)** — Safety and operation rules
+- **[discord.md](docs/discord.md)** — Discord bot usage guide
+
+---
+
+## Contributing
+
+All documentation is in English. When adding features:
+
+1. Update relevant docs in `docs/`
+2. Keep agent contracts (skill.md, heartbeat.md, etc.) in sync with implementation
+3. Use TypeScript for type safety
+4. Test before committing
+
+---
+
+## License
+
+(Add your license here)
+
+---
+
+## Getting Help
+
+- **Questions about breeding?** See [docs/breeding-system-design.md](docs/breeding-system-design.md)
+- **Building a Discord bot?** See [docs/discord.md](docs/discord.md)
+- **Automating imports/breeding?** See [docs/skill.md](docs/skill.md) and [docs/heartbeat.md](docs/heartbeat.md)
+- **API documentation?** Visit `/api/docs` when the server is running, or read the OpenAPI JSON at `/api/openapi.json`

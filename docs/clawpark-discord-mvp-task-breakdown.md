@@ -1,409 +1,481 @@
-# ClawPark Discord MVP Task Breakdown
+# ClawPark Discord MVP — Task Breakdown
 
-- **기준 문서:** `docs/prd-clawpark-moltbook-style.md`
-- **목표:** Discord에서 자연어로 breeding intent를 전달하면, ClawPark가 후보 탐색 → eligibility 확인 → consent 처리 → breed 실행 → lineage 결과 반환까지 수행하는 MVP를 만든다.
-- **우선 surface:** **Coordinator Bot Mode**
-- **후순위 surface:** **Skill-installed Claw Mode**는 protocol-compatible 수준까지만 고려한다.
+**Reference**: `docs/prd-clawpark-moltbook-style.md`
 
----
+**Goal**: Build a Discord-integrated breeding orchestration MVP that allows users to import OpenClaw agents locally, breed them through conversational Discord messages, and save children with full lineage tracking.
 
-## 1. MVP 완료 정의
+**Priority Surface**: Coordinator Bot Mode (dedicated ClawPark bot)
 
-다음이 실제로 동작하면 MVP 완료로 본다.
-
-1. 사용자가 로컬 OpenClaw ZIP 2개 이상을 ClawPark에 import할 수 있다.
-2. Discord에서 ClawPark bot에게 자연어로 breed 의도를 말할 수 있다.
-3. 시스템이 후보를 제안하거나, 명시된 두 개체의 eligibility를 설명할 수 있다.
-4. consent가 필요 없는 경우 바로 breed를 실행할 수 있다.
-5. consent가 필요한 경우 pending 상태와 다음 액션을 Discord에 설명할 수 있다.
-6. breed 성공 시 Discord에 lineage summary를 반환하고 child를 저장할 수 있다.
+**Future Surface**: Skill-installed Claw Mode (protocol-compatible, not implemented in MVP)
 
 ---
 
-## 2. 범위
+## 1. MVP Completion Definition
 
-### 포함
-- local ZIP import
-- Nursery/Home 기반 specimen 상태 조회
-- Discord OAuth identity 연결
-- Coordinator Bot Mode
-- breeding intent / proposal / consent / run lifecycle
-- Discord 응답 포맷팅
+The MVP is complete when:
 
-### 제외
-- full guild-wide production Discord bot rollout
-- slash command 중심 UX
-- 완전한 multi-agent Claw-to-Claw negotiation
-- public marketplace economy
+1. Users can import local OpenClaw agent ZIPs (1 or more)
+2. Users can ask Discord bot to breed agents using natural language
+3. System suggests candidates or explains compatibility
+4. System handles consent (auto-approve for same-owner, pending for cross-owner)
+5. Breed executes and child is saved
+6. Discord returns lineage summary
 
 ---
 
-## 3. 작업 스트림
+## 2. Scope
 
-MVP는 아래 6개 스트림으로 나눠 진행한다.
+### Included
 
-1. **Core domain / state**
-2. **Import / specimen registry**
+- Local ZIP import
+- Nursery/Home specimen state
+- Discord OAuth identity
+- Coordinator Bot conversation
+- Breeding intent → proposal → consent → run lifecycle
+- Discord response formatting
+
+### Excluded
+
+- Guild-wide production rollout
+- Slash command UI (natural language only)
+- Multi-agent autonomous negotiation
+- Public marketplace economy
+
+---
+
+## 3. Work Streams
+
+MVP is organized into 6 streams:
+
+1. **Core domain / contracts**
+2. **Import and specimen registry**
 3. **Breeding orchestration backend**
 4. **Discord surface**
 5. **Frontend integration**
-6. **Verification / docs / ops**
+6. **Verification and hardening**
 
 ---
 
-## 4. Phase 0 — Contract & Domain Freeze
+## 4. Phase 0 — Contract Foundation
 
-목표: Discord MVP가 기대는 핵심 contract를 먼저 고정한다.
+**Goal**: Freeze core contracts before implementation.
 
-### Task 0.1 — Discord command contract 확정
-- 자연어 intent 예시를 고정한다:
-  - “나 이거 breed하고 싶어”
-  - “저 놈이랑 breed해”
-  - “breed 가능한 상대 찾아줘”
-  - “이놈이랑 저놈이랑 breed하는게 어때?”
-  - “진행해”
-  - “취소해”
-- intent parsing 결과의 최소 구조를 확정한다.
+### Task 0.1 — Intent and Command Contract
 
-**산출물**
-- `docs/prd-clawpark-moltbook-style.md` 반영 완료
-- `docs/clawpark-discord-mvp-task-breakdown.md`
+Define natural language patterns and intent structure.
 
-**완료 기준**
-- backend와 Discord surface가 동일한 intent vocabulary를 사용한다.
+**Examples**:
+- "breed these two"
+- "find me a partner"
+- "are they compatible?"
+- "go ahead"
+- "cancel"
 
-### Task 0.2 — ownership / consent 정책 고정
-- specimen ownership case 정의:
-  - `same-owner`
-  - `same-linked-identity`
-  - `cross-owner`
-  - `unknown-owner`
-- MVP 정책:
-  - same-owner / same-linked-identity → 자동 진행 가능
-  - cross-owner / unknown-owner → pending consent
+**Deliverable**: Intent parsing spec in `docs/discord.md`
 
-**완료 기준**
-- eligibility API와 proposal lifecycle에서 같은 규칙을 사용한다.
+**Acceptance**: Backend and Discord surface use identical vocabulary.
+
+### Task 0.2 — Ownership / Consent Policy
+
+Define auto-approve vs. pending-consent cases.
+
+**Cases**:
+- `same-owner` → auto-approve
+- `same-linked-identity` → auto-approve
+- `cross-owner` → pending consent (24h timeout)
+- `unknown-owner` → pending consent
+
+**Deliverable**: Consent logic in `server/breedingConsent.ts`
+
+**Acceptance**: Eligibility API and proposal lifecycle use same rules.
 
 ---
 
-## 5. Phase 1 — Import & Registry 안정화
+## 5. Phase 1 — Import and Registry
 
-목표: Discord orchestration이 믿고 쓸 specimen registry를 안정화한다.
+**Goal**: Stable specimen registry for orchestration.
 
-### Task 1.1 — parser를 workspace-aware로 정리
-- `server/openclawParser.ts` 보강
-- 다음 우선순위로 읽기:
-  - `IDENTITY.md`
-  - `SOUL.md`
-  - `TOOLS.md`
-  - `skills/*/SKILL.md`
-- warnings / fingerprint / provenance를 일관되게 생성
+### Task 1.1 — Parser Robustness
 
-**완료 기준**
-- import preview에 identity/soul/skills/tools/warnings가 모두 표시된다.
-- 테스트 fixture 기준으로 안정적으로 파싱된다.
+Improve `server/openclawParser.ts` to reliably extract:
+- `IDENTITY.md` → identity (creature, role, directive, vibe, emoji)
+- `SOUL.md` → traits
+- `TOOLS.md` → tools
+- `skills/*/SKILL.md` → skill badges
 
-### Task 1.2 — local specimen registry 정리
-- import 결과를 local claimed specimen으로 저장
-- specimen 상태 필드 정리:
-  - ownership
-  - breed_state
-  - verified_identity
-  - provenance
+**Completion Criteria**:
+- Import preview shows identity/traits/skills/tools
+- 2+ test fixtures parse stably
+- Warnings are clear and actionable
 
-**완료 기준**
-- import 후 Nursery에서 specimen 목록이 일관되게 보인다.
+### Task 1.2 — Specimen State Model
 
-### Task 1.3 — Home payload 확장
-- `/api/v1/home` 추가 또는 기존 state에서 제공
-- 최소 필드:
-  - `connected_identity`
-  - `onboarding_state`
-  - `owned_claw_count`
-  - `breedable_pairs`
-  - `pending_claims`
-  - `unsaved_children`
-  - `what_to_do_next`
+Refine specimen ownership and breed state:
+- Fields: `id, name, identity, soul, skills, tools, visual, ownership_state, breed_state, provenance`
+- States: imported → claimed → breedable → cooldown → archived
+- Provenance: source hash, fingerprint, claimed_by Discord user
 
-**완료 기준**
-- frontend와 Discord surface가 같은 home summary를 참조 가능하다.
+**Completion Criteria**:
+- Imported specimens appear in Nursery with consistent states
+
+### Task 1.3 — Home Payload
+
+Create or extend `/api/v1/home` endpoint.
+
+**Minimum fields**:
+- `connected_identity` — Discord user or null
+- `owned_claw_count` — Number of claimed agents
+- `breedable_pairs` — Available pairs
+- `pending_imports` — Awaiting claim
+- `unsaved_children` — Recent children not yet saved
+- `what_to_do_next` — Recommended action
+
+**Completion Criteria**:
+- Frontend and Discord both call same `/home`
+- Agents can decide next action in 3 seconds
 
 ---
 
 ## 6. Phase 2 — Breeding Orchestration Backend
 
-목표: Discord와 UI가 공통으로 쓸 orchestration backend를 만든다.
+**Goal**: Shared orchestration logic for UI and Discord.
 
-### Task 2.1 — BreedingIntent 모델/스토어 추가
-- 새 모델:
-  - `BreedingIntent`
-  - `BreedingConsent`
-- 상태 전이:
-  - `intent_created`
-  - `candidate_suggested`
-  - `consent_pending`
-  - `eligibility_checked`
-  - `run_started`
-  - `result_ready`
-  - `saved`
-  - `cancelled`
+### Task 2.1 — BreedingIntent Model
 
-**완료 기준**
-- intent 단위로 요청을 추적할 수 있다.
+Add types and store for breeding requests.
 
-### Task 2.2 — candidate suggestion service
-- 입력:
-  - 특정 parent A/B
-  - 한쪽만 지정된 경우
-  - 자연어 조건
-- 출력:
-  - 후보 목록
-  - compatibility 요약
-  - block reason
+**Models**:
+- `BreedingIntent` — user's desire to breed
+- `BreedingConsent` — permission tracking
+- Statuses: intent_created → candidate_suggested → consent_pending → eligibility_checked → run_started → result_ready → saved/cancelled
 
-**완료 기준**
-- “breed 가능한 상대 찾아줘” 요청에 최소 1개 이상 후보 또는 실패 이유가 반환된다.
+**Completion Criteria**:
+- Intent CRUD works
+- Statuses transition correctly
+- Multi-turn context preserved (user last intent)
 
-### Task 2.3 — eligibility + proposal service
-- `GET /api/v1/breeding/eligibility`
+### Task 2.2 — Candidate Suggestion
+
+Service that suggests compatible breeding pairs.
+
+**Input**:
+- No target (find any pair)
+- One target (find partner for this agent)
+- Two targets (check compatibility)
+
+**Output**:
+- Candidate list with names
+- Compatibility summary
+- Block reason (if any)
+
+**Completion Criteria**:
+- "Find me a partner" requests return 1+ candidates or clear block reason
+
+### Task 2.3 — Eligibility and Proposal
+
+Endpoints for breed validation and consent.
+
+**Endpoints**:
+- `GET /api/v1/breeding/eligibility?parentA=...&parentB=...`
 - `POST /api/v1/breeding/proposals`
 - `POST /api/v1/breeding/proposals/:id/consent`
 
-**완료 기준**
-- proposal 생성 시 consent 필요 여부를 판별한다.
-- consent pending이면 실행 대신 상태를 반환한다.
+**Completion Criteria**:
+- Proposal creation triggers consent logic
+- Consent pending is tracked
+- Auto-approve works for same-owner
 
-### Task 2.4 — breed run execution 연결
-- 기존 breed engine과 orchestration 연결
+### Task 2.4 — Breed Execution
+
+Connect orchestration to breed engine.
+
+**Endpoints**:
 - `POST /api/v1/breeding/runs`
 - `POST /api/v1/breeding/runs/:id/save`
 
-**완료 기준**
-- proposal 승인 후 실제 breed run이 실행된다.
-- 결과 child가 lineage와 함께 저장된다.
+**Completion Criteria**:
+- Breed actually runs after consent approved
+- Child saved with lineage
 
 ---
 
 ## 7. Phase 3 — Discord Surface MVP
 
-목표: Discord에서 실제로 대화형 breed orchestration을 수행한다.
+**Goal**: Conversational breeding in Discord.
 
-### Task 3.1 — Discord bot entrypoint 설계
-- MVP는 **Coordinator Bot Mode** 우선
-- 메시지 입력 → intent parsing → orchestration service 호출
+### Task 3.1 — Bot Setup
 
-**완료 기준**
-- Discord surface는 backend contract만 호출하고, business rule을 중복 구현하지 않는다.
+Basic Discord bot entrypoint.
 
-### Task 3.2 — 자연어 intent parsing
-- 메시지에서 추출:
-  - breeder intent 여부
-  - 명시 parent names
-  - comparison vs execute vs cancel intent
-- fallback:
-  - 모호하면 clarification 대신 후보/다음 액션 제안
+- Message handling
+- Intent parsing delegation
+- Orchestration service calls
+- Response formatting
 
-**완료 기준**
-- 대표 문장 5~10개에 대해 의도 분류가 안정적으로 된다.
+**Completion Criteria**:
+- Bot receives message
+- Bot responds with status
 
-### Task 3.3 — Discord response formatter
-- 반환 타입:
-  - candidate suggestion
-  - compatibility summary
-  - consent pending
-  - blocked reason
-  - success lineage summary
-- 응답은 짧고 명확하게 유지
+### Task 3.2 — Intent Parsing
 
-**완료 기준**
-- Discord에서 한 번의 답변으로 현재 상태와 다음 액션을 이해할 수 있다.
+Extract breeding intent from natural language.
 
-### Task 3.4 — “진행해 / 취소해” 후속 액션 처리
-- 최근 intent/proposal 문맥 저장
-- 사용자가 “진행해”라고 하면 직전 제안 이어받기
-- “취소해”는 pending intent 종료
+**Extract**:
+- Is this a breeding request?
+- Which agents (by name)?
+- Is it a "suggest", "check", or "execute" intent?
 
-**완료 기준**
-- multi-turn 대화가 최소 수준으로 이어진다.
+**Fallback**: If ambiguous, ask clarifying candidates instead of failing.
+
+**Completion Criteria**:
+- 5-10 representative phrases parse correctly
+
+### Task 3.3 — Response Formatter
+
+Format orchestration results for Discord.
+
+**Return types**:
+- Candidate suggestion (list, compatibility)
+- Compatibility check result
+- Consent pending notice
+- Blocked reason
+- Success lineage summary
+
+Keep concise (1-2 Discord messages).
+
+**Completion Criteria**:
+- User understands status and next action from one response
+
+### Task 3.4 — Multi-Turn Context
+
+Handle "go ahead" and "cancel" in Discord.
+
+Store user's last intent so "go ahead" can execute it.
+
+**Completion Criteria**:
+- Multi-turn conversation maintains context
 
 ---
 
 ## 8. Phase 4 — Frontend Integration
 
-목표: 웹 UI와 Discord가 같은 상태 모델을 보게 만든다.
+**Goal**: UI and Discord share same state model.
 
-### Task 4.1 — Connect 영역 구현/정리
-- Discord 연결 상태 표시
-- verified identity 안내
-- local-only vs linked mode 설명
+### Task 4.1 — Connect Area
 
-### Task 4.2 — Home 화면 추가
-- next action
-- breedable pairs
-- pending consent
-- unsaved children
+Discord sign-in UI.
 
-### Task 4.3 — Nursery/Breed Lab 연계 정리
-- UI에서도 proposal/eligibility 모델을 같은 방식으로 사용
-- Discord와 UI의 결과가 충돌하지 않도록 저장 모델 정리
+- "Sign in with Discord" button
+- Connected identity display
+- Explanation of local vs. linked mode
 
-**완료 기준**
-- UI와 Discord가 같은 specimen/breeding 상태를 읽는다.
+**Completion Criteria**:
+- User can see connection status
+- Disconnect works
 
----
+### Task 4.2 — Home Screen
 
-## 9. Phase 5 — Verification & Hardening
+Display `/home` payload.
 
-목표: “실제로 된다”를 증명한다.
+- Status summary
+- Next action recommendation
+- Breedable pairs
+- Pending claims
 
-### Task 5.1 — API contract tests
-- intent 생성
-- candidate suggestion
-- consent pending
-- breed run success
-- lineage save
+**Completion Criteria**:
+- User knows what to do next
 
-### Task 5.2 — parser / import regression tests
-- OpenClaw ZIP fixture 2개 이상
-- `skills/*/SKILL.md` 추출 검증
+### Task 4.3 — UI / Discord Alignment
 
-### Task 5.3 — Discord flow integration test
-- 최소 happy path:
-  1. import
-  2. Discord에 breed 요청
-  3. 후보 제안
-  4. 진행
-  5. child 생성
-  6. lineage 반환
+Ensure both surfaces work with same breed model.
 
-### Task 5.4 — failure path tests
-- cooldown
-- unknown specimen
-- ambiguous request
-- cross-owner consent pending
+- UI creates breeding intent same way Discord does
+- Both surface read same Home payload
+- Results don't conflict
 
-**완료 기준**
-- happy path와 대표 failure path가 자동 테스트 또는 재현 가능한 스크립트로 검증된다.
+**Completion Criteria**:
+- Breeding from UI and Discord produces identical results
 
 ---
 
-## 10. 구현 순서 제안
+## 9. Phase 5 — Verification and Hardening
+
+**Goal**: "It actually works" proof.
+
+### Task 5.1 — API Contract Tests
+
+Test core orchestration flows.
+
+- Intent creation
+- Candidate suggestion
+- Consent pending
+- Breed run success
+- Lineage save
+
+**Completion Criteria**:
+- All happy paths automated
+
+### Task 5.2 — Parser Regression Tests
+
+Ensure import stability.
+
+- 2+ OpenClaw ZIP fixtures
+- Skill badge extraction verification
+
+**Completion Criteria**:
+- Parser doesn't regress on known fixtures
+
+### Task 5.3 — Discord Integration Test
+
+End-to-end flow via Discord.
+
+**Steps**:
+1. Import agents
+2. Ask Discord to breed
+3. Get candidates
+4. Confirm breeding
+5. Get result lineage
+
+**Completion Criteria**:
+- Happy path reproducible
+
+### Task 5.4 — Failure Path Tests
+
+Verify error handling.
+
+- Cooldown enforcement
+- Unknown specimen rejection
+- Ambiguous request handling
+- Cross-owner consent pending
+
+**Completion Criteria**:
+- Failures are logged and user is informed
+
+---
+
+## 10. Implementation Order
 
 ### Sprint 1
-- Phase 0
-- Task 1.1
-- Task 1.2
-- Task 1.3
+
+- Phase 0 (all tasks)
+- Task 1.1 (parser)
+- Task 1.2 (specimen state)
+- Task 1.3 (home)
 
 ### Sprint 2
-- Task 2.1
-- Task 2.2
-- Task 2.3
-- Task 2.4
+
+- Task 2.1 (intent model)
+- Task 2.2 (candidate suggestion)
+- Task 2.3 (proposal/consent)
+- Task 2.4 (breed execution)
 
 ### Sprint 3
-- Task 3.1
-- Task 3.2
-- Task 3.3
-- Task 3.4
+
+- Task 3.1 (bot setup)
+- Task 3.2 (intent parsing)
+- Task 3.3 (response formatting)
+- Task 3.4 (multi-turn)
 
 ### Sprint 4
-- Task 4.1
-- Task 4.2
-- Task 4.3
-- Task 5.1~5.4
+
+- Task 4.1 (Connect UI)
+- Task 4.2 (Home UI)
+- Task 4.3 (UI/Discord alignment)
+- Phase 5 (all tests and hardening)
 
 ---
 
-## 11. 우선 구현 파일 후보
+## 11. Key Files to Create/Modify
 
 ### Backend
-- `server/index.ts`
-- `server/openclawParser.ts`
-- `server/marketplaceStore.ts` 또는 specimen/registry store 확장 지점
-- 신규 orchestration module:
-  - `server/breedingOrchestrator.ts`
-  - `server/discordIntent.ts`
-  - `server/breedingConsent.ts`
+
+**Create/Modify**:
+- `server/breedingOrchestrator.ts` — 7-stage lifecycle (✓ exists, review)
+- `server/breedingConsent.ts` — Consent logic (✓ exists, review)
+- `server/openclawParser.ts` — ZIP parsing (extend)
+- `src/types/breedingIntent.ts` — Intent types (✓ exists, review)
+
+**New endpoints**:
+- `GET /api/v1/home`
+- `POST /api/v1/discord/intents`
+- `GET /api/v1/breeding/eligibility`
+- `POST /api/v1/breeding/proposals`
+- `POST /api/v1/breeding/runs`
 
 ### Frontend
-- `src/components/Marketplace/Marketplace.tsx` (분리 대상)
-- 신규:
-  - `src/components/Home/...`
-  - `src/components/Connect/...`
-  - `src/services/clawparkHomeApi.ts`
 
-### Types
-- `src/types/marketplace.ts`
-- 신규 또는 확장:
-  - `src/types/breedingIntent.ts`
-  - `src/types/home.ts`
+**New components**:
+- `src/components/Connect/` — Discord sign-in
+- `src/components/Home/` — Status and next action
+- `src/services/clawparkHomeApi.ts` — Home endpoint caller
 
-### Tests
-- `tests/server/openclaw-parser.spec.ts`
-- `tests/server/marketplace-api.spec.ts`
-- 신규:
-  - `tests/server/breeding-orchestration.spec.ts`
-  - `tests/server/discord-intent.spec.ts`
+**Existing to extend**:
+- `src/components/Nursery/` — Align with new state model
+- `src/components/Breed Lab/` — Align with orchestration API
 
----
+### Discord Bot
 
-## 12. 주요 의사결정
-
-### 결정 1 — MVP surface
-- **채택:** Coordinator Bot Mode
-- **이유:** 구현 난이도와 운영 복잡도가 가장 낮음
-
-### 결정 2 — Skill-installed Claw Mode
-- **채택:** protocol-compatible only
-- **이유:** 장기 비전은 유지하되 초기 범위를 통제하기 위함
-
-### 결정 3 — consent 기본 정책
-- **채택:** same-owner / same-linked-identity 자동 진행, 나머지 pending
-- **이유:** MVP에서 설명 가능성과 안전성을 확보
-
-### 결정 4 — marketplace 우선순위
-- **채택:** 후순위
-- **이유:** 실제 사용자 가치 흐름은 Discord + local breeding에 있음
+**New**:
+- `server/discord/bot.ts` — Bot entrypoint
+- `server/discord/intentParser.ts` — Message → intent
+- `server/discord/responseFormatter.ts` — Result → Discord message
+- `server/discord/multiTurnContext.ts` — User → last intent
 
 ---
 
-## 13. 주요 리스크
+## 12. Key Decisions
 
-1. 자연어 intent parsing이 너무 약하면 UX가 금방 무너짐
-2. parser가 실제 OpenClaw workspace 변형을 충분히 커버하지 못할 수 있음
-3. consent 모델이 과도하게 복잡해지면 MVP가 늦어짐
-4. Marketplace 컴포넌트가 너무 많은 역할을 가지고 있어 분리가 필요함
-5. Discord bot surface와 웹 UI가 서로 다른 상태 모델을 보면 혼란이 생김
+**Decision 1 — MVP Surface**: Coordinator Bot Mode (not Skill-installed Claw)
+- Simplest implementation
+- Fastest path to "it works"
 
----
+**Decision 2 — Consent Defaults**: same-owner/same-linked → auto, others → pending
+- Safety: cross-owner requires approval
+- Simplicity: no complex rules
 
-## 14. 최종 체크리스트
+**Decision 3 — Marketplace**: Post-MVP
+- Core value is local breeding
+- Publish is nice-to-have
 
-출시 전 아래가 모두 참이어야 한다.
-
-- [ ] OpenClaw ZIP 2개 import 가능
-- [ ] Nursery에서 specimen 상태 확인 가능
-- [ ] `/api/v1/home` 제공
-- [ ] Discord OAuth 연결 가능
-- [ ] Discord에서 breed intent 입력 가능
-- [ ] candidate suggestion 가능
-- [ ] eligibility / block reason 설명 가능
-- [ ] consent pending 처리 가능
-- [ ] breed run 실행 가능
-- [ ] lineage summary 반환 가능
-- [ ] child 저장 가능
-- [ ] happy path 검증 완료
-- [ ] failure path 검증 완료
+**Decision 4 — Discord Requirement**: Optional
+- Local import/breed always works
+- Discord is conversational layer, not gate
 
 ---
 
-## 15. 다음 문서 후보
+## 13. Risks
 
-이 문서 다음으로 바로 만들면 좋은 문서:
+1. **Parser fragility** — Real OpenClaw workspaces vary
+2. **Intent parsing errors** — "Breed" means different things; easy to misunderstand
+3. **Consent model scope creep** — Can become very complex
+4. **UI/Discord divergence** — Both might build breed logic separately
+5. **Marketplace interference** — Existing code has too many concerns
 
-1. `docs/clawpark-discord-api-contract.md`
-2. `docs/clawpark-intent-parsing-spec.md`
-3. `docs/clawpark-home-payload-spec.md`
-4. `docs/clawpark-consent-policy.md`
+---
+
+## 14. Launch Checklist
+
+Before MVP goes live:
+
+- [ ] Import 1+ agents successfully
+- [ ] Nursery shows claimed specimens
+- [ ] `/api/v1/home` works
+- [ ] Discord OAuth sign-in works
+- [ ] Discord bot responds to breed intent
+- [ ] Candidate suggestions accurate
+- [ ] Consent pending works (cross-owner)
+- [ ] Breed execution succeeds
+- [ ] Lineage summary returned in Discord
+- [ ] Child saved with full lineage
+- [ ] Happy path tests pass
+- [ ] Failure path tests pass
+- [ ] skill.md, heartbeat.md, breeding.md, rules.md published
+
+---
+
+## 15. Next Documents to Create
+
+1. `docs/breeding-system-design.md` — Deep dive on how breeding works (for UI designers)
+2. `docs/discord-api-contract.md` — Bot and intent details
+3. `docs/consent-policy.md` — Ownership and approval rules
+4. `docs/home-payload-spec.md` — Full `/home` schema
