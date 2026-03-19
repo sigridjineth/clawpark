@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=.env scripts/dev-all.mjs",
+    "server": "npx tsx --env-file=.env server/index.ts",
     "build": "npm run typecheck && vite build",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run --passWithNoTests",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "server:dev": "node --env-file=.env --experimental-strip-types --watch server/index.ts",
-    "server:start": "node --env-file=.env --experimental-strip-types server/index.ts",
+    "server:dev": "npx tsx --env-file=.env --watch server/index.ts",
+    "server:start": "npx tsx --env-file=.env server/index.ts",
     "dev:web": "vite"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "jsdom": "^28.1.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.0",
     "vite": "^5.4.21",
