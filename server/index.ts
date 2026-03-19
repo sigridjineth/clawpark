@@ -22,6 +22,8 @@ import {
 } from './sessions.ts';
 import { createSpecimenStore } from './specimenStore.ts';
 import { registerV1Routes } from './v1Routes.ts';
+import { startDiscordBot } from './discord-bot.ts';
+import { breed } from '../src/engine/breed.ts';
 
 function isSecureCookie(config: MarketplaceServerConfig) {
   return new URL(config.publicOrigin).protocol === 'https:';
@@ -611,12 +613,58 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
     }
   });
 
-  return { server, config, db, store };
+  return { server, config, db, store, specimenStore };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { server, config } = createMarketplaceServer();
+  const { server, config, specimenStore: sStore } = createMarketplaceServer() as ReturnType<typeof createMarketplaceServer>;
   server.listen(config.port, config.host, () => {
     console.log(`ClawPark marketplace server listening on ${config.publicOrigin}`);
+
+    // Start Discord bot if token is configured
+    if (config.discordBotToken) {
+      try {
+        startDiscordBot({
+          token: config.discordBotToken,
+          orchestratorDeps: {
+            resolveSpecimenByName: (name: string) => {
+              const all = sStore.listSpecimens();
+              const match = all.find((s: { name: string }) => s.name.toLowerCase() === name.toLowerCase());
+              if (!match) return null;
+              return { id: match.id, name: match.name, ownerId: match.discordUserId, breedable: match.ownershipState === 'claimed' && match.breedState === 'ready' };
+            },
+            resolveSpecimenById: (id: string) => {
+              const s = sStore.getSpecimen(id);
+              if (!s) return null;
+              return { id: s.id, name: s.name, ownerId: s.discordUserId, breedable: s.ownershipState === 'claimed' && s.breedState === 'ready' };
+            },
+            listBreedableSpecimens: () => {
+              return sStore.listSpecimens()
+                .filter((s: { ownershipState: string; breedState: string }) => s.ownershipState === 'claimed' && s.breedState === 'ready')
+                .map((s: { id: string; name: string; discordUserId: string | null }) => ({ id: s.id, name: s.name, ownerId: s.discordUserId, breedable: true }));
+            },
+            runBreed: async (parentAId: string, parentBId: string, prompt?: string) => {
+              const parentA = sStore.getSpecimen(parentAId);
+              const parentB = sStore.getSpecimen(parentBId);
+              if (!parentA || !parentB) throw new Error('Specimens not found');
+              const run = sStore.createBreedingRun(parentAId, parentBId, prompt);
+              const result = breed({ parentA: parentA.claw, parentB: parentB.claw, breedPrompt: prompt, seed: Date.now() });
+              const completed = sStore.completeBreedingRun(run.id, result.child);
+              return {
+                runId: run.id,
+                childId: completed?.child?.id ?? result.child.id,
+                childName: result.child.name,
+                lineageSummary: `${parentA.name} + ${parentB.name} → ${result.child.name} (${result.child.archetype})`,
+              };
+            },
+          },
+        });
+        console.log('Discord bot started successfully.');
+      } catch (err) {
+        console.error('Failed to start Discord bot:', err);
+      }
+    } else {
+      console.log('DISCORD_BOT_TOKEN not set — bot disabled.');
+    }
   });
 }
