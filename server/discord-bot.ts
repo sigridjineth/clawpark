@@ -46,12 +46,15 @@ Rules:
 async function generateResponse(context: string): Promise<string> {
   try {
     const client = createOpenRouterClient();
-    return await client.chat(
+    const response = await client.chat(
       [{ role: 'user', content: context }],
       RESPONSE_SYSTEM_PROMPT,
     );
-  } catch {
-    return context; // fallback to raw context if LLM fails
+    // Discord message limit is 2000 chars
+    return response.length > 1900 ? response.slice(0, 1900) + '...' : response;
+  } catch (err) {
+    console.error('[ClawPark Bot] LLM response error:', err);
+    return 'Something went wrong generating a response. Please try again!';
   }
 }
 
@@ -120,7 +123,7 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       const targetNames = mentionedUsersList.map((u) => u.displayName).join(', ');
       console.log(`[ClawPark Bot] Persuade intent for: ${targetNames}`);
       const response = await generateResponse(
-        `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention @ClawPark to get started. Keep it under 200 words.`,
+        `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention <@${botId}> to get started. Use <@${botId}> when referring to the bot, not "@ClawPark". Keep it under 150 words.`,
       );
       await msg.reply(response);
     } else {
