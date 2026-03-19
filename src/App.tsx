@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { BirthScene } from './components/Birth/BirthScene';
 import { BreedLab } from './components/BreedLab/BreedLab';
 import { Connect } from './components/Connect/Connect';
@@ -8,14 +9,123 @@ import { LineageGraph } from './components/Lineage/LineageGraph';
 import { Nursery } from './components/Nursery/Nursery';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
 import type { Claw, Screen } from './types/claw';
-import { attachDemoShortcut, isDemoModeFromSearch, updateDemoModeQuery } from './utils/demoMode';
 
 const NAV_SCREENS: Array<{ screen: Screen; label: string }> = [
   { screen: 'home', label: 'Home' },
-  { screen: 'import', label: 'Import' },
   { screen: 'nursery', label: 'Nursery' },
   { screen: 'breedLab', label: 'Lab' },
+  { screen: 'import', label: 'Import' },
+  { screen: 'connect', label: 'Connect' },
 ];
+
+const itemBaseClass =
+  'relative z-10 inline-flex min-h-9 items-center justify-center rounded-[10px] border border-transparent px-4 py-2 font-mono text-sm leading-5 transition-colors focus-visible:outline-none';
+
+function GlassNavbar({
+  activeScreen,
+  onNavigate,
+}: {
+  activeScreen: Screen;
+  onNavigate: (screen: Screen) => void;
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [hovered, setHovered] = useState<Screen | null>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  const highlightedScreen = hovered ?? activeScreen;
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setPrefersReducedMotion(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  const updateIndicator = useCallback((screen: Screen) => {
+    const list = listRef.current;
+    const item = itemRefs.current[screen];
+    if (!list || !item) return;
+    const listRect = list.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    setIndicatorStyle({
+      x: itemRect.left - listRect.left,
+      y: itemRect.top - listRect.top,
+      width: itemRect.width,
+      height: itemRect.height,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateIndicator(highlightedScreen);
+  }, [highlightedScreen, updateIndicator]);
+
+  useEffect(() => {
+    const handleResize = () => updateIndicator(activeScreen);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [activeScreen, updateIndicator]);
+
+  return (
+    <ul
+      ref={listRef}
+      className="relative flex rounded-[10px] border border-white/10 p-[2px] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+      style={{ background: 'var(--openclaw-glass)' }}
+      onPointerLeave={() => {
+        setHovered(null);
+        updateIndicator(activeScreen);
+      }}
+    >
+      {/* Animated indicator */}
+      {indicatorStyle && (
+        <motion.span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 rounded-[10px] border border-[var(--openclaw-border)] bg-[var(--openclaw-outline)]"
+          animate={{
+            x: indicatorStyle.x,
+            y: indicatorStyle.y,
+            width: indicatorStyle.width,
+            height: indicatorStyle.height,
+          }}
+          transition={
+            prefersReducedMotion
+              ? { duration: 0 }
+              : { type: 'spring', stiffness: 400, damping: 35, mass: 0.8 }
+          }
+          style={{ position: 'absolute' }}
+        />
+      )}
+
+      {NAV_SCREENS.map(({ screen, label }) => {
+        const isActive = activeScreen === screen;
+        const isHighlighted = highlightedScreen === screen;
+        return (
+          <li key={screen}>
+            <button
+              ref={(node) => { itemRefs.current[screen] = node; }}
+              type="button"
+              onClick={() => onNavigate(screen)}
+              onPointerEnter={() => {
+                setHovered(screen);
+                updateIndicator(screen);
+              }}
+              aria-current={isActive ? 'page' : undefined}
+              className={`${itemBaseClass} bg-transparent ${
+                isHighlighted
+                  ? 'text-[var(--openclaw-text)]'
+                  : 'text-[var(--openclaw-muted)]'
+              }`}
+            >
+              {label}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function App() {
   const {
@@ -37,10 +147,6 @@ function App() {
     addChildToGallery,
     birthPhase,
     setBirthPhase,
-    demoMode,
-    toggleDemoMode,
-    setDemoMode,
-    loadDemoPair,
     homePayload,
     importPreview,
     fetchHome,
@@ -52,21 +158,6 @@ function App() {
   const [homeLoading, setHomeLoading] = useState(true);
 
   const selectedClaws = useMemo(() => getSelectedClaws(claws, selectedIds), [claws, selectedIds]);
-
-  useEffect(() => {
-    setDemoMode(isDemoModeFromSearch());
-    return attachDemoShortcut(toggleDemoMode);
-  }, [setDemoMode, toggleDemoMode]);
-
-  useEffect(() => {
-    updateDemoModeQuery(demoMode);
-  }, [demoMode]);
-
-  useEffect(() => {
-    if (demoMode && screen === 'nursery' && selectedIds.length === 0) {
-      loadDemoPair();
-    }
-  }, [demoMode, loadDemoPair, screen, selectedIds.length]);
 
   // Bootstrap data from server
   useEffect(() => {
@@ -96,8 +187,9 @@ function App() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-black text-[var(--openclaw-text)]">
-      {/* Absolute header — matches reference layout */}
+      {/* Absolute header — matches reference layout exactly */}
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 mx-auto h-16 w-full sm:h-20">
+        {/* Logo — top-left, font-display */}
         <button
           type="button"
           onClick={() => setScreen('home')}
@@ -106,130 +198,189 @@ function App() {
           ClawPark
         </button>
 
-        {/* Glass pill nav — centered */}
+        {/* Centered glass pill navbar */}
         <nav className="pointer-events-auto absolute left-1/2 top-3 -translate-x-1/2 sm:top-4">
-          <ul
-            className="relative flex rounded-[10px] border border-white/10 p-[2px]"
-            style={{ background: 'var(--openclaw-glass)' }}
-          >
-            {NAV_SCREENS.map(({ screen: s, label }) => (
-              <li key={s}>
-                <button
-                  type="button"
-                  onClick={() => setScreen(s)}
-                  className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-4 py-2 font-mono text-sm leading-5 transition-colors ${
-                    screen === s
-                      ? 'border-[var(--openclaw-border)] bg-[var(--openclaw-outline)] text-[var(--openclaw-text)]'
-                      : 'border-transparent text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
-                  }`}
-                >
-                  {label}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <GlassNavbar activeScreen={screen} onNavigate={setScreen} />
         </nav>
 
-        {/* Right side: specimen count + demo toggle */}
+        {/* Right side: specimen count */}
         <div className="pointer-events-auto absolute right-4 top-3.5 flex items-center gap-2 sm:top-4">
-          <span className="jp-pill">{claws.length}</span>
-          <button
-            type="button"
-            onClick={toggleDemoMode}
-            className={`inline-flex min-h-9 items-center justify-center rounded-[10px] border px-3 py-2 font-mono text-[11px] transition-colors ${
-              demoMode
-                ? 'border-white/30 bg-white/15 text-white'
-                : 'border-white/10 text-[var(--openclaw-muted)] hover:text-[var(--openclaw-text)]'
-            }`}
-            style={{ background: demoMode ? undefined : 'var(--openclaw-glass)' }}
-          >
-            Demo {demoMode ? 'On' : 'Off'}
-          </button>
+          <span className="inline-flex min-h-9 items-center justify-center rounded-[10px] border border-white/10 px-3 py-2 font-mono text-[11px] text-[var(--openclaw-muted)]" style={{ background: 'var(--openclaw-glass)' }}>
+            {claws.length} specimen{claws.length !== 1 ? 's' : ''}
+          </span>
         </div>
       </header>
 
       {/* Content — padded below absolute header */}
-      <div className="mx-auto w-full max-w-7xl px-4 pb-8 pt-24 sm:px-6 sm:pt-28">
+      <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-24 sm:px-6 sm:pt-28">
         <main className="flex-1">
-          {screen === 'home' && (
-            <Home
-              homePayload={homePayload}
-              loading={homeLoading}
-              onNavigate={setScreen}
-            />
-          )}
+          <AnimatePresence mode="wait">
+            {screen === 'home' && (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Home
+                  homePayload={homePayload}
+                  loading={homeLoading}
+                  onNavigate={setScreen}
+                />
+              </motion.div>
+            )}
 
-          {screen === 'import' && (
-            <Import
-              onImport={importClaw}
-              onClaim={claimClaw}
-              importPreview={importPreview}
-              onClearPreview={handleClearPreview}
-              discordUserId={homePayload?.connected_identity?.discordUserId}
-            />
-          )}
+            {screen === 'import' && (
+              <motion.div
+                key="import"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Import
+                  onImport={importClaw}
+                  onClaim={claimClaw}
+                  importPreview={importPreview}
+                  onClearPreview={handleClearPreview}
+                  discordUserId={homePayload?.connected_identity?.discordUserId}
+                />
+              </motion.div>
+            )}
 
-          {screen === 'nursery' && (
-            <Nursery
-              claws={claws}
-              specimens={specimens}
-              selectedIds={selectedIds}
-              onSelect={selectClaw}
-              onContinue={() => setScreen('breedLab')}
-            />
-          )}
+            {screen === 'nursery' && (
+              <motion.div
+                key="nursery"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Nursery
+                  claws={claws}
+                  specimens={specimens}
+                  selectedIds={selectedIds}
+                  onSelect={selectClaw}
+                  onContinue={() => setScreen('breedLab')}
+                />
+              </motion.div>
+            )}
 
-          {screen === 'connect' && (
-            <Connect
-              connectedIdentity={homePayload?.connected_identity ?? null}
-            />
-          )}
+            {screen === 'connect' && (
+              <motion.div
+                key="connect"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Connect
+                  connectedIdentity={homePayload?.connected_identity ?? null}
+                />
+              </motion.div>
+            )}
 
-          {screen === 'breedLab' && parentPair && prediction && (
-            <BreedLab
-              parents={parentPair}
-              preferredTraitId={preferredTraitId}
-              breedPrompt={breedPrompt}
-              breedingConversation={breedingConversation}
-              onBreedPromptChange={setBreedPrompt}
-              onTalkToParents={generateParentConversation}
-              onPreferredTrait={setPreferredTrait}
-              onBack={() => setScreen('nursery')}
-              onBreed={breedSelected}
-              prediction={prediction}
-            />
-          )}
-
-          {screen === 'birth' && parentPair && breedResult && (
-            <BirthScene
-              parents={parentPair}
-              result={breedResult}
-              phase={birthPhase}
-              onPhaseChange={setBirthPhase}
-              onViewLineage={() => setScreen('lineage')}
-              onBreedAgain={addChildToGallery}
-              onBackToGallery={() => setScreen('nursery')}
-            />
-          )}
-
-          {screen === 'lineage' && parentPair && breedResult && (
-            <section className="space-y-4">
-              <div className="jp-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <h2 className="font-display text-3xl text-bone">Lineage</h2>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setScreen('birth')} className="jp-btn-secondary">
-                    Back
+            {screen === 'breedLab' && (!parentPair || !prediction) && (
+              <motion.div
+                key="breedLab-empty"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <section className="flex min-h-[60vh] flex-col items-center justify-center text-center">
+                  <h1 className="font-display text-[clamp(2rem,5vw,3.4rem)] leading-[0.95] text-white">
+                    Breed Lab
+                  </h1>
+                  <p className="mt-4 max-w-[600px] font-mono text-[clamp(0.95rem,1.8vw,1.1rem)] text-[var(--openclaw-muted)]">
+                    Select two specimens from the Nursery to begin breeding. Each parent contributes traits, skills, and tools to the child.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setScreen('nursery')}
+                    className="mt-8 inline-flex min-h-9 items-center justify-center rounded-[10px] border border-[var(--openclaw-border)] px-6 py-2 font-mono text-sm text-[var(--openclaw-cta)] hover:bg-white/15 hover:text-white"
+                    style={{ background: 'var(--openclaw-glass)' }}
+                  >
+                    Go to Nursery
                   </button>
-                  <button type="button" onClick={addChildToGallery} className="jp-btn">
-                    Save to nursery
-                  </button>
-                </div>
-              </div>
-              <LineageGraph child={breedResult.child} allClaws={claws} />
-            </section>
-          )}
+                </section>
+              </motion.div>
+            )}
+
+            {screen === 'breedLab' && parentPair && prediction && (
+              <motion.div
+                key="breedLab"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <BreedLab
+                  parents={parentPair}
+                  preferredTraitId={preferredTraitId}
+                  breedPrompt={breedPrompt}
+                  breedingConversation={breedingConversation}
+                  onBreedPromptChange={setBreedPrompt}
+                  onTalkToParents={generateParentConversation}
+                  onPreferredTrait={setPreferredTrait}
+                  onBack={() => setScreen('nursery')}
+                  onBreed={breedSelected}
+                  prediction={prediction}
+                />
+              </motion.div>
+            )}
+
+            {screen === 'birth' && parentPair && breedResult && (
+              <motion.div
+                key="birth"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <BirthScene
+                  parents={parentPair}
+                  result={breedResult}
+                  phase={birthPhase}
+                  onPhaseChange={setBirthPhase}
+                  onViewLineage={() => setScreen('lineage')}
+                  onBreedAgain={addChildToGallery}
+                  onBackToGallery={() => setScreen('nursery')}
+                />
+              </motion.div>
+            )}
+
+            {screen === 'lineage' && parentPair && breedResult && (
+              <motion.div
+                key="lineage"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <section className="space-y-4">
+                  <div className="jp-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <h2 className="font-display text-3xl text-white">Lineage</h2>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setScreen('birth')} className="jp-btn-secondary">
+                        Back
+                      </button>
+                      <button type="button" onClick={addChildToGallery} className="jp-btn">
+                        Save to nursery
+                      </button>
+                    </div>
+                  </div>
+                  <LineageGraph child={breedResult.child} allClaws={claws} />
+                </section>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
+
+      {/* Bottom border line */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 h-px bg-white/10" />
     </div>
   );
 }
