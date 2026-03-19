@@ -263,6 +263,7 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
     if (!isMentioned && !hasPrefix) return;
 
     try {
+      await msg.channel.sendTyping();
       await handleBreedMessage(msg, deps);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
