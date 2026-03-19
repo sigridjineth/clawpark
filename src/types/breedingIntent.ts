@@ -16,7 +16,7 @@ export type OwnerRelationship = 'same-owner' | 'same-linked-identity' | 'cross-o
 
 export type SourceSurface = 'discord_bot' | 'discord_claw' | 'web_ui';
 
-export type ParsedAction = 'breed' | 'find_partner' | 'compare' | 'proceed' | 'cancel' | 'unknown';
+export type ParsedAction = 'breed' | 'find_partner' | 'compare' | 'proceed' | 'cancel' | 'greet' | 'unknown';
 
 export interface RequesterIdentity {
   discordUserId?: string;

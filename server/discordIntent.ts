@@ -8,17 +8,18 @@ Parse user messages in Korean or English and extract their breeding intent.
 
 Valid actions:
 - "breed": User wants to breed two specific specimens (e.g., "breed X with Y", "저 놈이랑 breed해", "X이랑 Y breed해")
-- "find_partner": User wants to find a breedable partner (e.g., "breed 가능한 상대 찾아줘", "나 이거 breed하고 싶어", "상대 찾아줘")
+- "find_partner": User wants to find a breedable partner (e.g., "breed 가능한 상대 찾아줘", "find me a partner", "who can I breed?", "show me available specimens")
 - "compare": User wants to compare two specimens (e.g., "이놈이랑 저놈이랑 breed하는게 어때?", "compare X and Y")
-- "proceed": User is confirming/proceeding (e.g., "진행해", "proceed", "go ahead", "yes", "ok", "응")
-- "cancel": User wants to cancel (e.g., "취소해", "cancel", "stop", "no", "아니")
-- "unknown": Cannot determine intent
+- "proceed": User is confirming/proceeding (e.g., "진행해", "proceed", "go ahead", "yes", "ok", "응", "do it", "let's go")
+- "cancel": User wants to cancel (e.g., "취소해", "cancel", "stop", "no", "아니", "never mind")
+- "greet": User is greeting or asking general questions (e.g., "hi", "hello", "what can you do?", "help", "안녕")
+- "unknown": Cannot determine intent at all
 
 Extract any specimen names mentioned (proper nouns like "Ember", "Nova", "Sage", "Bolt", "Glyph").
 
 Respond ONLY with valid JSON:
 {
-  "action": "breed" | "find_partner" | "compare" | "proceed" | "cancel" | "unknown",
+  "action": "breed" | "find_partner" | "compare" | "proceed" | "cancel" | "greet" | "unknown",
   "mentionedNames": ["name1", "name2"]
 }`;
 
@@ -58,7 +59,7 @@ function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIn
       mentionedNames?: string[];
     };
 
-    const validActions: ParsedAction[] = ['breed', 'find_partner', 'compare', 'proceed', 'cancel', 'unknown'];
+    const validActions: ParsedAction[] = ['breed', 'find_partner', 'compare', 'proceed', 'cancel', 'greet', 'unknown'];
     const action: ParsedAction = validActions.includes(parsed.action as ParsedAction)
       ? (parsed.action as ParsedAction)
       : 'unknown';
@@ -76,7 +77,10 @@ function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIn
 function fallbackParse(text: string, rawMessage: string): ParsedIntent {
   const lower = text.toLowerCase();
 
-  if (/진행|proceed|go ahead|계속|yes|ok\b|okay|응|yep/.test(lower)) {
+  if (/^(hi|hello|hey|안녕|help|what can you|how do|뭐|도움)/.test(lower)) {
+    return { action: 'greet' as ParsedAction, mentionedNames: [], rawMessage };
+  }
+  if (/진행|proceed|go ahead|계속|yes|ok\b|okay|응|yep|do it|let'?s go/.test(lower)) {
     return { action: 'proceed', mentionedNames: [], rawMessage };
   }
   if (/취소|cancel|stop|abort|no\b|아니/.test(lower)) {
