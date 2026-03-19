@@ -10,8 +10,8 @@
     "test": "vitest run --passWithNoTests",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "server:dev": "node --experimental-strip-types --watch server/index.ts",
-    "server:start": "node --experimental-strip-types server/index.ts",
+    "server:dev": "node --env-file=.env --experimental-strip-types --watch server/index.ts",
+    "server:start": "node --env-file=.env --experimental-strip-types server/index.ts",
     "dev:web": "vite"
   },
   "dependencies": {
