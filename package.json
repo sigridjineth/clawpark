@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-all.mjs",
+    "dev": "node --env-file=.env scripts/dev-all.mjs",
     "build": "npm run typecheck && vite build",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run --passWithNoTests",
