@@ -626,6 +626,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       try {
         startDiscordBot({
           token: config.discordBotToken,
+          importSpecimen: async (zipPath: string, discordUserId: string) => {
+            const { parseOpenClawWorkspaceZip } = await import('./openclawParser.ts');
+            const { createHash } = await import('node:crypto');
+            const { readFile } = await import('node:fs/promises');
+            const buffer = await readFile(zipPath);
+            const fingerprint = createHash('sha256').update(buffer).digest('hex').slice(0, 16);
+            const { claw, manifest } = await parseOpenClawWorkspaceZip(zipPath);
+            const result = sStore.importSpecimen(claw, manifest, fingerprint, discordUserId);
+            sStore.claimSpecimen(result.specimenId, discordUserId);
+            return { specimenName: claw.name, specimenId: result.specimenId };
+          },
           orchestratorDeps: {
             resolveSpecimenByName: (name: string) => {
               const all = sStore.listSpecimens();

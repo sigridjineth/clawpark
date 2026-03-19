@@ -4,8 +4,13 @@
 
 import { Client, Events, GatewayIntentBits, type Message } from 'discord.js';
 import type { OrchestratorDeps, RequesterIdentity } from '../src/types/breedingIntent.ts';
+import { writeFile, mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { parseDiscordMessage, stripBotPrefix } from './discordIntent.ts';
 import { createOpenRouterClient } from './openrouter.ts';
+import { parseOpenClawWorkspaceZip } from './openclawParser.ts';
 import {
   cancelIntent,
   checkEligibilityAndConsent,
@@ -20,6 +25,7 @@ import {
 export interface DiscordBotDeps {
   token: string;
   orchestratorDeps: OrchestratorDeps;
+  importSpecimen?: (zipPath: string, discordUserId: string) => Promise<{ specimenName: string; specimenId: string }>;
 }
 
 // --- LLM response generator ---
@@ -264,6 +270,34 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
 
     try {
       await msg.channel.sendTyping();
+
+      // Handle ZIP file attachments
+      const zipAttachment = msg.attachments.find((a) => a.name?.endsWith('.zip'));
+      if (zipAttachment && deps.importSpecimen) {
+        try {
+          const tempDir = join(tmpdir(), `clawpark-discord-${randomUUID().slice(0, 8)}`);
+          await mkdir(tempDir, { recursive: true });
+          const tempPath = join(tempDir, zipAttachment.name ?? 'upload.zip');
+          const response = await fetch(zipAttachment.url);
+          const buffer = Buffer.from(await response.arrayBuffer());
+          await writeFile(tempPath, buffer);
+          const result = await deps.importSpecimen(tempPath, msg.author.id);
+          await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+          const llmResponse = await generateResponse(
+            `User "${msg.author.tag}" uploaded an OpenClaw ZIP file named "${zipAttachment.name}". It was successfully imported! Specimen name: "${result.specimenName}", ID: ${result.specimenId}. The specimen has been claimed and is ready to breed. Celebrate the import and suggest they can now breed it with other specimens or find partners.`,
+          );
+          await msg.reply(llmResponse);
+          return;
+        } catch (importErr) {
+          const errMsg = importErr instanceof Error ? importErr.message : 'Unknown error';
+          const llmResponse = await generateResponse(
+            `User tried to upload a ZIP file "${zipAttachment.name}" but import failed: ${errMsg}. Explain what went wrong and remind them the ZIP must contain IDENTITY.md and SOUL.md files.`,
+          );
+          await msg.reply(llmResponse);
+          return;
+        }
+      }
+
       await handleBreedMessage(msg, deps);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
