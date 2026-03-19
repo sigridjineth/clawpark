@@ -75,10 +75,17 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
     ? `Available specimens: ${breedable.map((s) => s.name).join(', ')} (${breedable.length} total)`
     : 'No specimens available yet. User needs to import OpenClaw ZIPs first.';
 
-  // Extract mentioned users (excluding the bot itself)
+  // Extract mentioned users from raw message content (more reliable than msg.mentions.users)
   const botId = msg.client.user?.id;
-  const mentionedUsersList = [...msg.mentions.users.values()].filter((u) => u.id !== botId);
-  console.log(`[ClawPark Bot] Mentions: ${mentionedUsersList.map((u) => `${u.displayName}(${u.id})`).join(', ') || 'none'}, botId=${botId}`);
+  const rawMentionIds = [...msg.content.matchAll(/<@!?(\d+)>/g)].map((m) => m[1]).filter((id) => id !== botId);
+  const mentionedUsersList: Array<{ id: string; displayName: string }> = [];
+  for (const id of rawMentionIds) {
+    try {
+      const user = await msg.client.users.fetch(id);
+      if (user) mentionedUsersList.push({ id: user.id, displayName: user.displayName ?? user.username });
+    } catch { /* skip unfetchable users */ }
+  }
+  console.log(`[ClawPark Bot] Mentions: ${mentionedUsersList.map((u) => `${u.displayName}(${u.id})`).join(', ') || 'none'}, botId=${botId}, rawIds=${rawMentionIds.join(',')}`);
   const mentionContext = mentionedUsersList.length > 0
     ? `\nMentioned users: ${mentionedUsersList.map((u) => `${u.displayName} (mention tag: <@${u.id}>)`).join(', ')}. IMPORTANT: When referring to these users in your response, use their Discord mention tag (e.g. <@${mentionedUsersList[0]?.id}>) so they get notified.`
     : '';
