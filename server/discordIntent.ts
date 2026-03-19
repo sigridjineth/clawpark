@@ -13,13 +13,14 @@ Valid actions:
 - "proceed": User is confirming/proceeding (e.g., "진행해", "proceed", "go ahead", "yes", "ok", "응", "do it", "let's go")
 - "cancel": User wants to cancel (e.g., "취소해", "cancel", "stop", "no", "아니", "never mind")
 - "greet": User is greeting or asking general questions (e.g., "hi", "hello", "what can you do?", "help", "안녕")
+- "persuade": User wants the bot to persuade/invite another user to upload their OpenClaw ZIP (e.g., "persuade @user to upload", "ask @user to join", "invite @user", "tell @user to share their claw")
 - "unknown": Cannot determine intent at all
 
 Extract any specimen names mentioned (proper nouns like "Ember", "Nova", "Sage", "Bolt", "Glyph").
 
 Respond ONLY with valid JSON:
 {
-  "action": "breed" | "find_partner" | "compare" | "proceed" | "cancel" | "greet" | "unknown",
+  "action": "breed" | "find_partner" | "compare" | "proceed" | "cancel" | "greet" | "persuade" | "unknown",
   "mentionedNames": ["name1", "name2"]
 }`;
 
@@ -59,7 +60,7 @@ function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIn
       mentionedNames?: string[];
     };
 
-    const validActions: ParsedAction[] = ['breed', 'find_partner', 'compare', 'proceed', 'cancel', 'greet', 'unknown'];
+    const validActions: ParsedAction[] = ['breed', 'find_partner', 'compare', 'proceed', 'cancel', 'greet', 'persuade', 'unknown'];
     const action: ParsedAction = validActions.includes(parsed.action as ParsedAction)
       ? (parsed.action as ParsedAction)
       : 'unknown';
@@ -77,6 +78,9 @@ function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIn
 function fallbackParse(text: string, rawMessage: string): ParsedIntent {
   const lower = text.toLowerCase();
 
+  if (/persuade|invite|ask.*upload|tell.*upload|recruit|설득/.test(lower)) {
+    return { action: 'persuade' as ParsedAction, mentionedNames: [], rawMessage };
+  }
   if (/^(hi|hello|hey|안녕|help|what can you|how do|뭐|도움)/.test(lower)) {
     return { action: 'greet' as ParsedAction, mentionedNames: [], rawMessage };
   }

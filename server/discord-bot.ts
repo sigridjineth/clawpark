@@ -75,10 +75,27 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
     ? `Available specimens: ${breedable.map((s) => s.name).join(', ')} (${breedable.length} total)`
     : 'No specimens available yet. User needs to import OpenClaw ZIPs first.';
 
+  // Extract mentioned users (excluding the bot itself)
+  const mentionedUsers = msg.mentions.users.filter((u) => u.id !== msg.client.user?.id);
+  const mentionContext = mentionedUsers.size > 0
+    ? `\nMentioned users: ${mentionedUsers.map((u) => `${u.displayName} (mention tag: <@${u.id}>)`).join(', ')}. IMPORTANT: When referring to these users in your response, use their Discord mention tag (e.g. <@${mentionedUsers.first()?.id}>) so they get notified.`
+    : '';
+
+  // --- persuade: invite another user to upload their ZIP ---
+  if (parsed.action === 'persuade' && mentionedUsers.size > 0) {
+    const targetMentions = mentionedUsers.map((u) => `<@${u.id}>`).join(', ');
+    const targetNames = mentionedUsers.map((u) => u.displayName).join(', ');
+    const response = await generateResponse(
+      `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention @ClawPark to get started. Keep it under 200 words.`,
+    );
+    await msg.reply(response);
+    return;
+  }
+
   // --- greet / unknown: pure LLM response ---
   if (parsed.action === 'greet' || parsed.action === 'unknown') {
     const response = await generateResponse(
-      `User said: "${userMessage}"\n\nContext: ${specimenContext}\n\nRespond naturally. If they're greeting, welcome them and explain what you can do (breed agents, find partners, show collection). If you can't understand their intent, ask them to clarify what they'd like to do with their specimens.`,
+      `User said: "${userMessage}"\n\nContext: ${specimenContext}${mentionContext}\n\nRespond naturally. If they mention other users, address those users directly using their Discord mention tags. If they're greeting, welcome them. If you can't understand their intent, ask them to clarify.`,
     );
     await msg.reply(response);
     return;
