@@ -75,9 +75,12 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
     ? `Available specimens: ${breedable.map((s) => s.name).join(', ')} (${breedable.length} total)`
     : 'No specimens available yet. User needs to import OpenClaw ZIPs first.';
 
-  // Extract mentioned users from raw message content (more reliable than msg.mentions.users)
+  // Extract mentioned users from raw message content
   const botId = msg.client.user?.id;
-  const rawMentionIds = [...msg.content.matchAll(/<@!?(\d+)>/g)].map((m) => m[1]).filter((id) => id !== botId);
+  console.log(`[ClawPark Bot] Raw content: "${msg.content}"`);
+  const allMentionIds = [...msg.content.matchAll(/<@!?(\d+)>/g)].map((m) => m[1]);
+  console.log(`[ClawPark Bot] All mention IDs: ${allMentionIds.join(', ') || 'none'}, botId: ${botId}`);
+  const rawMentionIds = allMentionIds.filter((id) => id !== botId);
   const mentionedUsersList: Array<{ id: string; displayName: string }> = [];
   for (const id of rawMentionIds) {
     try {
