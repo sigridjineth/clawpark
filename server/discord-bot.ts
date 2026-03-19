@@ -82,13 +82,21 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
     : '';
 
   // --- persuade: invite another user to upload their ZIP ---
-  if (parsed.action === 'persuade' && mentionedUsers.size > 0) {
-    const targetMentions = mentionedUsers.map((u) => `<@${u.id}>`).join(', ');
-    const targetNames = mentionedUsers.map((u) => u.displayName).join(', ');
-    const response = await generateResponse(
-      `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention @ClawPark to get started. Keep it under 200 words.`,
-    );
-    await msg.reply(response);
+  if (parsed.action === 'persuade') {
+    if (mentionedUsers.size > 0) {
+      const targetMentions = mentionedUsers.map((u) => `<@${u.id}>`).join(', ');
+      const targetNames = mentionedUsers.map((u) => u.displayName).join(', ');
+      console.log(`[ClawPark Bot] Persuade intent for: ${targetNames}`);
+      const response = await generateResponse(
+        `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention @ClawPark to get started. Keep it under 200 words.`,
+      );
+      await msg.reply(response);
+    } else {
+      const response = await generateResponse(
+        `User wants to persuade someone to upload, but didn't mention a specific user. Ask them to mention the user they want to invite, e.g. "@clawpark-demo persuade @username to upload their claw"`,
+      );
+      await msg.reply(response);
+    }
     return;
   }
 
