@@ -6,14 +6,14 @@
   font-display: swap;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* OpenClaw design tokens */
+  /* OpenClaw design tokens — from reference globals.css */
   --openclaw-text: #f5f5f5;
   --openclaw-muted: #9b9b9b;
   --openclaw-cta: #fafafa;
@@ -21,9 +21,14 @@
   --openclaw-outline: rgb(255 255 255 / 10%);
   --openclaw-border: #d4d4d4;
 
+  /* Font variables */
+  --font-ndot57: 'Ndot57';
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-sans: 'Inter', 'Segoe UI', Arial, sans-serif;
+
   color: var(--openclaw-text);
   background: #000000;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 * {
@@ -39,6 +44,9 @@ body {
   min-width: 320px;
   background: #000000;
   color: var(--openclaw-text);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -65,10 +73,17 @@ button:disabled {
   color: #ffffff;
 }
 
+@layer utilities {
+  .font-display {
+    font-family: var(--font-ndot57), var(--font-mono), monospace;
+    font-weight: 400;
+  }
+}
+
 @layer components {
   /* Glass card — matches openclaw AgentListingCard */
   .jp-card {
-    @apply rounded-[10px] border border-white/10 backdrop-blur-sm;
+    @apply rounded-[10px] border border-white/10;
     background: var(--openclaw-glass);
   }
 
@@ -82,7 +97,8 @@ button:disabled {
   }
 
   .jp-btn:disabled {
-    @apply border-white/10 text-[var(--openclaw-muted)] hover:bg-transparent;
+    @apply border-white/10 text-[var(--openclaw-muted)] hover:bg-transparent hover:text-[var(--openclaw-muted)];
+    cursor: not-allowed;
   }
 
   /* Secondary outline button */

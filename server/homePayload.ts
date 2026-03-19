@@ -18,6 +18,7 @@ export interface HomePayload {
   what_to_do_next: string;
   suggested_actions: SuggestedAction[];
   connected_identity: { discordUserId: string; discordHandle?: string } | null;
+  onboarding_state: 'none' | 'discord_linked';
 }
 
 export function buildHomePayload(store: SpecimenStore, discordUserId?: string): HomePayload {
@@ -71,6 +72,18 @@ export function buildHomePayload(store: SpecimenStore, discordUserId?: string): 
     });
   }
 
+  const unsavedCount = store.countUnsavedChildren();
+  if (unsavedCount > 0) {
+    actions.push({
+      action: 'save_children',
+      label: `Save ${unsavedCount} newborn${unsavedCount > 1 ? 's' : ''}`,
+      description: 'You have unsaved breed results — save them to your nursery',
+      method: 'POST',
+      endpoint: '/api/v1/breeding/runs/:id/save',
+      priority: 1,
+    });
+  }
+
   actions.sort((a, b) => a.priority - b.priority);
 
   let whatToDoNext = 'Import an OpenClaw workspace to get started.';
@@ -82,9 +95,10 @@ export function buildHomePayload(store: SpecimenStore, discordUserId?: string): 
     owned_claw_count: counts.claimed,
     pending_claims: counts.imported,
     breedable_pairs: counts.breedable >= 2 ? Math.floor(counts.breedable * (counts.breedable - 1) / 2) : 0,
-    unsaved_children: store.countUnsavedChildren(),
+    unsaved_children: unsavedCount,
     what_to_do_next: whatToDoNext,
     suggested_actions: actions,
     connected_identity: discordUserId ? { discordUserId } : null,
+    onboarding_state: (discordUserId ? 'discord_linked' : 'none') as 'none' | 'discord_linked',
   };
 }

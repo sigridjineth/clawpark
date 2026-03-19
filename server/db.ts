@@ -166,6 +166,20 @@ export function createDatabase(filename: string) {
 
   ensureColumn(db, 'breeding_runs', 'saved', 'INTEGER NOT NULL DEFAULT 0');
 
+  // Ensure v1 route columns exist (safe migrations for breeding tables)
+  ensureColumn(db, 'breeding_intents', 'parsed_action', 'TEXT');
+  ensureColumn(db, 'breeding_intents', 'proposal_id', 'TEXT');
+  ensureColumn(db, 'breeding_intents', 'run_id', 'TEXT');
+  ensureColumn(db, 'breeding_intents', 'result_child_id', 'TEXT');
+  ensureColumn(db, 'breeding_intents', 'block_reason', 'TEXT');
+  ensureColumn(db, 'breeding_intents', 'updated_at', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'breeding_proposals', 'owner_relationship', "TEXT NOT NULL DEFAULT 'unknown-owner'");
+  ensureColumn(db, 'breeding_proposals', 'consent_required', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'breeding_proposals', 'consent_id', 'TEXT');
+  ensureColumn(db, 'breeding_proposals', 'updated_at', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'breeding_consents', 'specimen_id', 'TEXT');
+  ensureColumn(db, 'breeding_consents', 'requested_at', "TEXT NOT NULL DEFAULT ''");
+
   return db;
 }
 
