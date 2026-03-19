@@ -198,41 +198,63 @@ export function registerV1Routes(
     // POST /api/v1/breeding/runs/:id/save
     const saveRunId = extractParam(pathname, '/api/v1/breeding/runs/:id/save');
     if (saveRunId && method === 'POST') {
-      const run = store.getBreedingRun(saveRunId);
-      if (!run) { sendError(res, 404, 'Breeding run not found.'); return true; }
-      if (!run.result_child_id) { sendError(res, 400, 'No child to save.'); return true; }
-      const child = store.getSpecimen(run.result_child_id);
-      sendJson(res, 200, { saved: true, child });
+      const saved = store.saveBreedingRun(saveRunId);
+      if (!saved) { sendError(res, 404, 'Breeding run not found.'); return true; }
+      sendJson(res, 200, saved);
       return true;
     }
 
     // POST /api/v1/discord/intents
     if (pathname === '/api/v1/discord/intents' && method === 'POST') {
-      const body = await readJson<{ intent: string; target_specimen_ids?: string[]; source_surface?: string }>(req);
-      // Simplified intent creation - stores the intent for orchestration
-      const id = `intent-${randomUUID().slice(0, 8)}`;
-      const now = new Date().toISOString();
-      try {
-        const insertIntent = (store as unknown as { _db?: undefined })._db;
-        // Use raw SQL since we don't have a prepared statement for this
-        sendJson(res, 201, {
-          intentId: id,
-          intent: body.intent,
-          targetSpecimenIds: body.target_specimen_ids ?? [],
-          sourceSurface: body.source_surface ?? 'api',
-          status: 'intent_created',
-          createdAt: now,
-        });
-      } catch {
-        sendJson(res, 201, {
-          intentId: id,
-          intent: body.intent,
-          targetSpecimenIds: body.target_specimen_ids ?? [],
-          sourceSurface: body.source_surface ?? 'api',
-          status: 'intent_created',
-          createdAt: now,
-        });
+      const body = await readJson<{ source_message?: string; requester_identity?: string; target_specimen_ids?: string[]; source_surface?: string }>(req);
+      if (!body.source_message) { sendError(res, 400, 'source_message required.'); return true; }
+      const intent = store.createBreedingIntent({
+        sourceSurface: body.source_surface ?? 'web_ui',
+        sourceMessage: body.source_message,
+        requesterIdentity: body.requester_identity ?? 'anonymous',
+        targetSpecimenIds: body.target_specimen_ids ?? [],
+      });
+      sendJson(res, 201, intent);
+      return true;
+    }
+
+    // GET /api/v1/discord/intents/:id
+    const intentId = matchRoute(pathname, method, '/api/v1/discord/intents/:id', 'GET');
+    if (intentId && typeof intentId === 'string') {
+      const intent = store.getBreedingIntent(intentId);
+      if (!intent) { sendError(res, 404, 'Intent not found.'); return true; }
+      sendJson(res, 200, intent);
+      return true;
+    }
+
+    // POST /api/v1/breeding/proposals
+    if (pathname === '/api/v1/breeding/proposals' && method === 'POST') {
+      const body = await readJson<{ parentAId: string; parentBId: string; requesterId?: string; intentId?: string }>(req);
+      if (!body.parentAId || !body.parentBId) { sendError(res, 400, 'parentAId and parentBId required.'); return true; }
+      const discordUserId = readSessionUserId(req.headers.cookie, config.sessionSecret) ?? undefined;
+      const proposal = store.createBreedingProposal({
+        parentAId: body.parentAId,
+        parentBId: body.parentBId,
+        requesterId: body.requesterId ?? discordUserId ?? 'anonymous',
+        intentId: body.intentId,
+      });
+      sendJson(res, 201, proposal);
+      return true;
+    }
+
+    // POST /api/v1/breeding/proposals/:id/consent
+    const consentProposalId = extractParam(pathname, '/api/v1/breeding/proposals/:id/consent');
+    if (consentProposalId && method === 'POST') {
+      const userId = readSessionUserId(req.headers.cookie, config.sessionSecret);
+      if (!userId) { sendError(res, 401, 'Discord OAuth required to give consent.'); return true; }
+      const body = await readJson<{ status?: string }>(req);
+      if (!body.status || !['approved', 'rejected'].includes(body.status)) {
+        sendError(res, 400, 'status must be approved or rejected.');
+        return true;
       }
+      const updated = store.updateProposalConsent(consentProposalId, body.status);
+      if (!updated) { sendError(res, 404, 'Proposal not found.'); return true; }
+      sendJson(res, 200, updated);
       return true;
     }
 
