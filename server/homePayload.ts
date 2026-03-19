@@ -82,7 +82,7 @@ export function buildHomePayload(store: SpecimenStore, discordUserId?: string): 
     owned_claw_count: counts.claimed,
     pending_claims: counts.imported,
     breedable_pairs: counts.breedable >= 2 ? Math.floor(counts.breedable * (counts.breedable - 1) / 2) : 0,
-    unsaved_children: 0,
+    unsaved_children: store.countUnsavedChildren(),
     what_to_do_next: whatToDoNext,
     suggested_actions: actions,
     connected_identity: discordUserId ? { discordUserId } : null,

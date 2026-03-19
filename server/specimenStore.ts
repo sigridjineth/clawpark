@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SqliteDatabase } from './db.ts';
-import type { Claw, BreedRequest, BreedResult } from '../src/types/claw.ts';
+import type { Claw } from '../src/types/claw.ts';
 
 export interface SpecimenRow {
   id: string;
@@ -37,6 +37,7 @@ export interface BreedingRunRow {
   prediction_json: string | null;
   result_child_id: string | null;
   status: string;
+  saved: number;
   created_at: string;
 }
 
@@ -60,8 +61,8 @@ export function createSpecimenStore(db: SqliteDatabase) {
   const selectImport = db.prepare(`SELECT * FROM import_records WHERE id = ?`);
 
   const insertBreedingRun = db.prepare(`
-    INSERT INTO breeding_runs (id, parent_a_id, parent_b_id, prompt, conversation_json, prediction_json, result_child_id, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO breeding_runs (id, parent_a_id, parent_b_id, prompt, conversation_json, prediction_json, result_child_id, status, saved, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
   `);
   const selectBreedingRun = db.prepare(`SELECT * FROM breeding_runs WHERE id = ?`);
   const updateBreedingRun = db.prepare(`UPDATE breeding_runs SET status = ?, result_child_id = ? WHERE id = ?`);
@@ -180,6 +181,16 @@ export function createSpecimenStore(db: SqliteDatabase) {
       return selectBreedingRun.get(id) as unknown as BreedingRunRow | undefined ?? null;
     },
 
+    saveBreedingRun(id: string) {
+      const run = selectBreedingRun.get(id) as unknown as BreedingRunRow | undefined;
+      if (!run) return null;
+      db.prepare('UPDATE breeding_runs SET saved = 1 WHERE id = ?').run(id);
+      const child = run.result_child_id
+        ? rowToSpecimen(selectSpecimen.get(run.result_child_id) as unknown as SpecimenRow)
+        : null;
+      return { ...run, saved: 1, child };
+    },
+
     getLineage(specimenId: string, maxDepth = 10): unknown {
       const specimen = this.getSpecimen(specimenId);
       if (!specimen || maxDepth <= 0) return specimen ? { specimen, parentA: null, parentB: null } : null;
@@ -194,8 +205,12 @@ export function createSpecimenStore(db: SqliteDatabase) {
       const a = this.getSpecimen(parentAId);
       const b = this.getSpecimen(parentBId);
       if (!a || !b) return { eligible: false, reason: 'One or both specimens not found' };
-      if (a.ownershipState !== 'claimed') return { eligible: false, reason: `Parent A is ${a.ownershipState}, must be claimed` };
-      if (b.ownershipState !== 'claimed') return { eligible: false, reason: `Parent B is ${b.ownershipState}, must be claimed` };
+      if (!['claimed', 'published'].includes(a.ownershipState)) {
+        return { eligible: false, reason: `Parent A is ${a.ownershipState}, must be claimed` };
+      }
+      if (!['claimed', 'published'].includes(b.ownershipState)) {
+        return { eligible: false, reason: `Parent B is ${b.ownershipState}, must be claimed` };
+      }
       return { eligible: true, parentA: a, parentB: b };
     },
 
@@ -205,8 +220,87 @@ export function createSpecimenStore(db: SqliteDatabase) {
         total: all.length,
         imported: all.filter(r => r.ownership_state === 'imported').length,
         claimed: all.filter(r => r.ownership_state === 'claimed').length,
-        breedable: all.filter(r => r.ownership_state === 'claimed' && r.breed_state === 'ready').length,
+        breedable: all.filter(r => ['claimed', 'published'].includes(r.ownership_state) && r.breed_state === 'ready').length,
       };
+    },
+
+    countUnsavedChildren() {
+      const result = db.prepare(
+        `SELECT COUNT(*) as count FROM breeding_runs WHERE saved = 0 AND result_child_id IS NOT NULL AND status = 'complete'`,
+      ).get() as { count: number } | undefined;
+      return result?.count ?? 0;
+    },
+
+    createBreedingIntent(params: {
+      sourceSurface: string;
+      sourceMessage: string;
+      requesterIdentity: string;
+      targetSpecimenIds: string[];
+    }) {
+      const id = `intent-${randomUUID().slice(0, 8)}`;
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO breeding_intents (id, source_surface, source_message, requester_identity, target_specimen_ids, status, suggested_candidates, created_at)
+        VALUES (?, ?, ?, ?, ?, 'intent_created', '[]', ?)
+      `).run(id, params.sourceSurface, params.sourceMessage, params.requesterIdentity, JSON.stringify(params.targetSpecimenIds), now);
+      return db.prepare('SELECT * FROM breeding_intents WHERE id = ?').get(id) as Record<string, unknown>;
+    },
+
+    getBreedingIntent(id: string) {
+      return db.prepare('SELECT * FROM breeding_intents WHERE id = ?').get(id) as Record<string, unknown> | null;
+    },
+
+    createBreedingProposal(params: {
+      parentAId: string;
+      parentBId: string;
+      requesterId: string;
+      intentId?: string;
+    }) {
+      const id = `prop-${randomUUID().slice(0, 8)}`;
+      const now = new Date().toISOString();
+      const specA = this.getSpecimen(params.parentAId);
+      const specB = this.getSpecimen(params.parentBId);
+      const ownerA = specA?.discordUserId ?? null;
+      const ownerB = specB?.discordUserId ?? null;
+      const isAnonymous = params.requesterId === 'anonymous';
+      const bothUnowned = ownerA === null && ownerB === null;
+      const requesterOwnsA = ownerA === null || ownerA === params.requesterId;
+      const requesterOwnsB = ownerB === null || ownerB === params.requesterId;
+      const autoApprove = isAnonymous || bothUnowned || (requesterOwnsA && requesterOwnsB);
+      const consentStatus = autoApprove ? 'auto_approved' : 'pending';
+
+      db.prepare(`
+        INSERT INTO breeding_proposals (id, parent_a_id, parent_b_id, requester_id, consent_status, intent_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, params.parentAId, params.parentBId, params.requesterId, consentStatus, params.intentId ?? null, now);
+
+      if (!autoApprove) {
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+        const owners = new Set<string>();
+        if (ownerA && ownerA !== params.requesterId) owners.add(ownerA);
+        if (ownerB && ownerB !== params.requesterId) owners.add(ownerB);
+        for (const owner of owners) {
+          db.prepare(`
+            INSERT INTO breeding_consents (id, proposal_id, owner_identity, status, responded_at, expires_at)
+            VALUES (?, ?, ?, 'pending', NULL, ?)
+          `).run(`con-${randomUUID().slice(0, 8)}`, id, owner, expiresAt);
+        }
+      }
+
+      return db.prepare('SELECT * FROM breeding_proposals WHERE id = ?').get(id) as Record<string, unknown>;
+    },
+
+    getBreedingProposal(id: string) {
+      return db.prepare('SELECT * FROM breeding_proposals WHERE id = ?').get(id) as Record<string, unknown> | null;
+    },
+
+    updateProposalConsent(proposalId: string, status: string) {
+      const row = db.prepare('SELECT * FROM breeding_proposals WHERE id = ?').get(proposalId) as Record<string, unknown> | null;
+      if (!row) return null;
+      const now = new Date().toISOString();
+      db.prepare('UPDATE breeding_proposals SET consent_status = ? WHERE id = ?').run(status, proposalId);
+      db.prepare('UPDATE breeding_consents SET status = ?, responded_at = ? WHERE proposal_id = ?').run(status, now, proposalId);
+      return db.prepare('SELECT * FROM breeding_proposals WHERE id = ?').get(proposalId) as Record<string, unknown>;
     },
   };
 }
