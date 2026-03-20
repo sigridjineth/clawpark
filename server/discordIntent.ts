@@ -41,13 +41,13 @@ export async function parseDiscordMessage(rawMessage: string): Promise<ParsedInt
   try {
     const client = createOpenRouterClient();
     const response = await client.chat([{ role: 'user', content: cleaned }], INTENT_SYSTEM_PROMPT);
-    return parseOpenRouterResponse(response, rawMessage);
+    return parseOpenRouterResponse(response, rawMessage, cleaned);
   } catch {
     return fallbackParse(cleaned, rawMessage);
   }
 }
 
-function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIntent {
+function parseOpenRouterResponse(response: string, rawMessage: string, cleanedMessage: string): ParsedIntent {
   const trimmed = response.trim();
   const jsonStart = trimmed.indexOf('{');
   const jsonEnd = trimmed.lastIndexOf('}');
@@ -65,17 +65,18 @@ function parseOpenRouterResponse(response: string, rawMessage: string): ParsedIn
       ? (parsed.action as ParsedAction)
       : 'unknown';
 
-    return {
+    const parsedIntent: ParsedIntent = {
       action,
       mentionedNames: Array.isArray(parsed.mentionedNames) ? parsed.mentionedNames.map(String) : [],
       rawMessage,
     };
+    return rescueActionableIntent(parsedIntent, cleanedMessage, rawMessage);
   } catch {
     return fallbackParse(trimmed, rawMessage);
   }
 }
 
-function fallbackParse(text: string, rawMessage: string): ParsedIntent {
+export function fallbackParse(text: string, rawMessage: string): ParsedIntent {
   const lower = text.toLowerCase();
 
   if (/persuade|invite|ask.*upload|tell.*upload|recruit|설득/.test(lower)) {
@@ -103,4 +104,23 @@ function fallbackParse(text: string, rawMessage: string): ParsedIntent {
   }
 
   return { action: 'unknown', mentionedNames: [], rawMessage };
+}
+
+export function rescueActionableIntent(parsed: ParsedIntent, cleanedMessage: string, rawMessage = parsed.rawMessage): ParsedIntent {
+  const heuristic = fallbackParse(cleanedMessage, rawMessage);
+  if (heuristic.action === 'unknown') {
+    return parsed;
+  }
+
+  const uncertainModelAction = parsed.action === 'unknown' || parsed.action === 'greet';
+  const actionableHeuristic = heuristic.action !== 'greet';
+  if (!uncertainModelAction || !actionableHeuristic) {
+    return parsed;
+  }
+
+  return {
+    action: heuristic.action,
+    mentionedNames: parsed.mentionedNames.length > 0 ? parsed.mentionedNames : heuristic.mentionedNames,
+    rawMessage,
+  };
 }

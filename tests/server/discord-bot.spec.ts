@@ -12,8 +12,11 @@ import {
   formatInheritanceReply,
   formatSpecimenSummary,
   extractLocalZipPath,
+  chooseRandomUniqueSpecimens,
+  formatRandomBreedSuccessReply,
   isAllowedLocalZipPath,
   isLikelyPersuadeFollowUp,
+  isRandomBreedRequest,
   isSpecimenInventoryQuestion,
   isSpecimenDetailQuestion,
   wantsUseAllVisibleCandidates,
@@ -74,6 +77,12 @@ describe('discord bot helpers', () => {
     expect(extractNumberSelections('can you breed 1 and 2')).toEqual([1, 2]);
     expect(extractNumberSelections('use 2 then 1')).toEqual([2, 1]);
     expect(wantsUseAllVisibleCandidates('okay got for 2 claws')).toBe(true);
+  });
+
+  it('detects random-pick breed requests', () => {
+    expect(isRandomBreedRequest('can you randomly pick 2 of 3 then breed with them')).toBe(true);
+    expect(isRandomBreedRequest('choose two claws and breed')).toBe(true);
+    expect(isRandomBreedRequest('randomly list the claws')).toBe(false);
   });
 
   it('falls back to specimen id when a candidate name is blank', () => {
@@ -179,5 +188,30 @@ describe('discord bot helpers', () => {
     });
     expect(inheritance).toContain('Parent A: khl7q5');
     expect(inheritance).toContain('Analysis (soul) ← parentA');
+  });
+
+  it('chooses unique random specimens and formats deterministic random-breed replies', () => {
+    const chosen = chooseRandomUniqueSpecimens([
+      { id: '1', name: 'Quartz', ownerId: null, breedable: true },
+      { id: '2', name: 'khl7q5', ownerId: null, breedable: true },
+      { id: '3', name: 'dgxspark-claw', ownerId: null, breedable: true },
+    ], 2);
+
+    expect(chosen).toHaveLength(2);
+    expect(new Set(chosen.map((specimen) => specimen.id)).size).toBe(2);
+
+    const message = formatRandomBreedSuccessReply({
+      chosen: [
+        { id: '1', name: 'Quartz', ownerId: null, breedable: true },
+        { id: '2', name: 'dgxspark-claw', ownerId: null, breedable: true },
+      ],
+      breedableCount: 3,
+      childName: 'Signal Bloom',
+      childId: 'spec-child',
+      lineageSummary: 'Quartz + dgxspark-claw → Signal Bloom',
+    });
+    expect(message).toContain('Random breeding complete');
+    expect(message).toContain('from the **3** breedable claws currently in the park');
+    expect(message).toContain('**Signal Bloom** (`spec-child`)');
   });
 });
