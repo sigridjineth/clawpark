@@ -329,11 +329,10 @@ export interface ParsedOpenClawSkillBundle {
 }
 
 export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<ParsedOpenClawBundle> {
-  const entries = await listZipEntries(zipPath);
-  const denied = entries.filter((entry) => isDeniedPath(entry.path));
-  if (denied.length > 0) {
-    throw new Error(`Upload contains restricted files: ${denied.slice(0, 3).map((entry) => entry.path).join(', ')}`);
-  }
+  const allEntries = await listZipEntries(zipPath);
+  // Skip denied files with a warning instead of rejecting the entire ZIP
+  const denied = allEntries.filter((entry) => isDeniedPath(entry.path));
+  const entries = allEntries.filter((entry) => !isDeniedPath(entry.path));
 
   const invalid = entries.filter((entry) => !CLAW_ALLOWLIST.includes(entry.path) && !/^skills\/[^/]+\/SKILL\.md$/i.test(entry.path));
   const includedFiles = entries.filter((entry) => CLAW_ALLOWLIST.includes(entry.path) || /^skills\/[^/]+\/SKILL\.md$/i.test(entry.path));
@@ -359,6 +358,7 @@ export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<Parsed
   );
 
   const warnings: string[] = [];
+  if (denied.length > 0) warnings.push(`Skipped ${denied.length} restricted file(s): ${denied.slice(0, 3).map((e) => e.path).join(', ')}${denied.length > 3 ? '...' : ''}`);
   if (!toolsMarkdown) warnings.push('TOOLS.md missing; tool loadout inferred from skills.');
   if (skillTexts.length === 0) warnings.push('No skills/*/SKILL.md files found; skill badges inferred from SOUL and IDENTITY.');
   if (invalid.length > 0) warnings.push(`Ignored ${invalid.length} non-public files from the upload.`);
