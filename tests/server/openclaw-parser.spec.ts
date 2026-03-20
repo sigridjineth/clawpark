@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from '../../server/openclawParser.ts';
+import { buildOpenClawWorkspaceZip, parseOpenClawSkillZip, parseOpenClawWorkspaceZip } from '../../server/openclawParser.ts';
 
 function createWorkspaceZip(files: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), 'clawpark-parser-'));
@@ -104,6 +104,75 @@ describe('openclaw bundle parsers', () => {
       expect(result.claw.name).toBe('dgxspark-claw');
       expect(result.claw.identity?.creature).toBe('OpenClaw Hatchling');
       expect(result.claw.identity?.emoji).toBe('🧬');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('exports a specimen as a re-importable workspace zip', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'clawpark-export-'));
+    const zipPath = join(dir, 'halo.zip');
+
+    try {
+      const bundle = await buildOpenClawWorkspaceZip({
+        id: 'claw-a120c936',
+        name: 'Halo',
+        archetype: 'The Skeptical Reviewer',
+        generation: 1,
+        identity: {
+          creature: 'Signal Raptor',
+          role: 'The Skeptical Reviewer',
+          directive: 'Challenge weak assumptions before they hatch.',
+          vibe: 'Sharp · Careful',
+          emoji: '🦖',
+        },
+        soul: {
+          traits: [
+            { id: 'trait-analysis', label: 'Analysis', description: 'Break complex systems into verifiable chunks.', weight: 1, color: '#fff', visualSymbol: { shapeModifier: 'geometric', description: '' } },
+          ],
+        },
+        skills: {
+          badges: [
+            { id: 'skill-review', label: 'Review', icon: '🔍', dominance: 1, color: '#fff' },
+          ],
+        },
+        tools: {
+          loadout: [
+            { id: 'tool-search-probe', label: 'Search Probe', icon: '🔎', description: 'Search the enclosure for signals.', potency: 1, color: '#fff' },
+          ],
+        },
+        visual: {
+          primaryColor: '#fff',
+          secondaryColor: '#000',
+          shapeModifiers: ['geometric'],
+          pattern: 'solid',
+          glowIntensity: 0.5,
+        },
+        intro: 'Halo keeps the hatchery honest.',
+        lineage: {
+          parentA: 'spec-quartz',
+          parentB: 'spec-khl7q5',
+          inheritanceMap: [
+            { type: 'soul', traitId: 'trait-analysis', label: 'Analysis', origin: 'parentA', kind: 'dominant' },
+          ],
+        },
+      });
+
+      expect(bundle[0]).toBe(80);
+      expect(bundle[1]).toBe(75);
+
+      execFileSync('python3', ['-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())', zipPath], { input: bundle });
+      const names = execFileSync('python3', ['-c', 'import sys, zipfile; zf = zipfile.ZipFile(sys.argv[1]); print("\\n".join(sorted(zf.namelist())))', zipPath], { encoding: 'utf8' })
+        .trim()
+        .split('\n');
+      expect(names).toContain('IDENTITY.md');
+      expect(names).toContain('SOUL.md');
+      expect(names).toContain('TOOLS.md');
+      expect(names.some((name) => name.endsWith('SKILL.md'))).toBe(true);
+
+      const reparsed = await parseOpenClawWorkspaceZip(zipPath);
+      expect(reparsed.claw.name).toBe('Halo');
+      expect(reparsed.manifest.includedFiles).toContain('IDENTITY.md');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

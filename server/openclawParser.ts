@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { SKILL_BADGES } from '../src/data/skillBadges.ts';
 import { SOUL_TRAITS } from '../src/data/soulTraits.ts';
 import { TOOL_BADGES } from '../src/data/toolBadges.ts';
+import { getClawIdentity, getClawTools, summarizeSkills, summarizeSoul, summarizeTools } from '../src/engine/openclaw.ts';
 import type { Claw, ClawIdentity, ClawVisual, SkillBadge, SoulTrait } from '../src/types/claw.ts';
 import type { ClawBundleManifest, PublishedSkill, SkillBundleManifest } from '../src/types/marketplace.ts';
 
@@ -325,6 +326,129 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+function safePathSegment(value: string) {
+  return slugify(value) || shortHash(value);
+}
+
+function renderIdentityMarkdown(claw: Claw) {
+  const identity = getClawIdentity(claw);
+  const lineage = claw.lineage
+    ? [
+        '## Lineage',
+        `- Parent A: ${claw.lineage.parentA}`,
+        `- Parent B: ${claw.lineage.parentB}`,
+      ].join('\n')
+    : '## Lineage\n- First-generation park specimen';
+
+  return [
+    '---',
+    `name: ${claw.name}`,
+    `creature: ${identity.creature}`,
+    `role: ${identity.role}`,
+    `directive: ${identity.directive}`,
+    `vibe: ${identity.vibe}`,
+    `emoji: ${identity.emoji}`,
+    `generation: ${claw.generation}`,
+    `id: ${claw.id}`,
+    '---',
+    '',
+    `# ${claw.name}`,
+    '',
+    `Creature: ${identity.creature}`,
+    `Role: ${identity.role}`,
+    `Directive: ${identity.directive}`,
+    `Vibe: ${identity.vibe}`,
+    `Emoji: ${identity.emoji}`,
+    '',
+    '## Intro',
+    claw.intro,
+    '',
+    lineage,
+    '',
+  ].join('\n');
+}
+
+function renderSoulMarkdown(claw: Claw) {
+  const inheritanceLines = claw.lineage?.inheritanceMap?.length
+    ? claw.lineage.inheritanceMap.map((record) =>
+      `- ${record.label} (${record.type}) ← ${record.origin}${record.kind ? ` [${record.kind}]` : ''}${record.detail ? ` — ${record.detail}` : ''}`)
+    : ['- No recorded inheritance changes yet.'];
+
+  return [
+    `# ${claw.name} Soul`,
+    '',
+    '## Summary',
+    summarizeSoul(claw),
+    '',
+    '## Traits',
+    ...claw.soul.traits.map((trait) => `- ${trait.label} — ${trait.description}`),
+    '',
+    '## Inheritance',
+    ...inheritanceLines,
+    '',
+  ].join('\n');
+}
+
+function renderToolsMarkdown(claw: Claw) {
+  const tools = getClawTools(claw).loadout;
+  return [
+    `# ${claw.name} Tools`,
+    '',
+    '## Summary',
+    summarizeTools(claw),
+    '',
+    '## Loadout',
+    ...tools.map((tool) => `- ${tool.label} ${tool.icon} — ${tool.description}`),
+    '',
+  ].join('\n');
+}
+
+function renderSkillMarkdown(claw: Claw, skill: SkillBadge) {
+  return [
+    '---',
+    `name: ${skill.label}`,
+    `description: Exported ClawPark skill badge for ${claw.name}.`,
+    '---',
+    '',
+    `# ${skill.label}`,
+    '',
+    `Badge: ${skill.label} ${skill.icon}`,
+    `Dominance: ${skill.dominance}`,
+    '',
+    summarizeSkills({
+      ...claw,
+      skills: { badges: [skill] },
+    }),
+    '',
+  ].join('\n');
+}
+
+export async function buildOpenClawWorkspaceZip(claw: Claw): Promise<Buffer> {
+  const entries: Array<{ path: string; contents: Buffer }> = [
+    {
+      path: 'IDENTITY.md',
+      contents: Buffer.from(renderIdentityMarkdown(claw), 'utf8'),
+    },
+    {
+      path: 'SOUL.md',
+      contents: Buffer.from(renderSoulMarkdown(claw), 'utf8'),
+    },
+    {
+      path: 'TOOLS.md',
+      contents: Buffer.from(renderToolsMarkdown(claw), 'utf8'),
+    },
+  ];
+
+  for (const skill of claw.skills.badges) {
+    entries.push({
+      path: `skills/${safePathSegment(skill.label)}/SKILL.md`,
+      contents: Buffer.from(renderSkillMarkdown(claw, skill), 'utf8'),
+    });
+  }
+
+  return buildZipBuffer(entries);
 }
 
 export interface ParsedOpenClawBundle {

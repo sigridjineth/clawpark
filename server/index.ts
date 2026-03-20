@@ -24,7 +24,6 @@ import { createSpecimenStore } from './specimenStore.ts';
 import { registerV1Routes } from './v1Routes.ts';
 import { startDiscordBot } from './discord-bot.ts';
 import { breed } from '../src/engine/breed.ts';
-import type { ClawBundle } from '../src/types/marketplace.ts';
 
 function isSecureCookie(config: MarketplaceServerConfig) {
   return new URL(config.publicOrigin).protocol === 'https:';
@@ -731,24 +730,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           exportSpecimenBundle: async (specimenId: string) => {
             const specimen = sStore.getSpecimen(specimenId);
             if (!specimen) return null;
-            const bundle: ClawBundle = {
-              kind: 'claw',
-              manifest: {
-                kind: 'claw',
-                bundleVersion: 1,
-                source: 'openclaw-workspace-zip',
-                includedFiles: ['IDENTITY.md', 'SOUL.md'],
-                ignoredFiles: [],
-                warnings: [],
-                generatedAt: new Date().toISOString(),
-                toolsVisibility: 'full',
-                coverStyle: 'avatar',
-              },
-              claw: specimen.claw,
-            };
+            const { buildOpenClawWorkspaceZip } = await import('./openclawParser.ts');
+            const bundleBuffer = await buildOpenClawWorkspaceZip(specimen.claw);
             return {
-              filename: `${specimen.name || specimen.id}.bundle.json`,
-              buffer: Buffer.from(JSON.stringify(bundle, null, 2), 'utf8'),
+              filename: `${(specimen.name || specimen.id).replace(/[^a-z0-9._-]+/gi, '-')}.zip`,
+              buffer: bundleBuffer,
             };
           },
         });

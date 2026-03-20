@@ -267,6 +267,28 @@ export function formatCountReply(allSpecimens: ResolvedSpecimen[], requesterId: 
   ].join('\n');
 }
 
+function hasFollowUpContext(authorId: string) {
+  return Boolean(
+    getRememberedFocusedSpecimen(authorId)
+    || getRememberedCandidateList(authorId)
+    || getRememberedPersuadeTargets(authorId).length > 0
+    || getUserLastIntent(authorId),
+  );
+}
+
+function isStructuredFollowUpMessage(message: string) {
+  return isCountQuestion(message)
+    || isSpecimenInventoryQuestion(message)
+    || isSpecimenDetailQuestion(message)
+    || isInheritanceQuestion(message)
+    || isExportQuestion(message)
+    || isRandomBreedRequest(message)
+    || isLikelyPersuadeFollowUp(message)
+    || wantsUseAllVisibleCandidates(message)
+    || extractNumberSelections(message).length > 0
+    || /\b(proceed|cancel|breed)\b|진행|취소|교배/i.test(message);
+}
+
 export function chooseRandomUniqueSpecimens(specimens: ResolvedSpecimen[], count: number) {
   if (count <= 0 || specimens.length === 0) return [];
   if (count >= specimens.length) return [...specimens];
@@ -474,7 +496,7 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       return;
     }
     await msg.reply({
-      content: 'Here is the downloadable specimen bundle. Right now I export a JSON bundle, not a ZIP workspace.',
+      content: 'Here is the downloadable ZIP workspace for that specimen. You can save it and re-upload it to ClawPark later.',
       files: [new AttachmentBuilder(exported.buffer, { name: exported.filename })],
     });
     return;
@@ -787,7 +809,8 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
       client.user?.displayName ?? '',
       msg.guild?.members.me?.displayName ?? '',
     ]);
-    if (!isMentioned && !hasRoleMention && !hasPrefix && !plainBotReference) return;
+    const mentionlessFollowUp = hasFollowUpContext(msg.author.id) && isStructuredFollowUpMessage(stripBotPrefix(msg.content));
+    if (!isMentioned && !hasRoleMention && !hasPrefix && !plainBotReference && !mentionlessFollowUp) return;
 
     try {
       await msg.channel.sendTyping();
