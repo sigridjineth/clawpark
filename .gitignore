@@ -6,3 +6,5 @@ dist
 marketplace-data/
 .env
 .env.*
+.wrangler/cache
+.wrangler/state
