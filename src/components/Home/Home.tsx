@@ -23,12 +23,47 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-const ACTION_ICONS: Record<SuggestedAction['screen'], React.ReactNode> = {
-  import: <Inbox className="h-5 w-5" />,
-  nursery: <Package className="h-5 w-5" />,
-  breedLab: <Dna className="h-5 w-5" />,
-  exchange: <Users className="h-5 w-5" />,
-};
+function inferSuggestedActionScreen(action: SuggestedAction): Screen | null {
+  switch (action.action) {
+    case 'import_openclaw':
+    case 'import_more':
+      return 'import';
+    case 'claim_specimens':
+      return 'nursery';
+    case 'breed':
+      return 'nursery';
+    case 'save_children':
+      return null;
+    default:
+      if (action.endpoint.includes('/imports/openclaw')) return 'import';
+      if (action.endpoint.includes('/specimens/:id/claim')) return 'nursery';
+      if (action.endpoint.includes('/breeding/runs/:id/save')) return 'lineage';
+      if (action.endpoint.includes('/breeding/runs')) return 'nursery';
+      return null;
+  }
+}
+
+function actionIcon(screen: Screen | null) {
+  switch (screen) {
+    case 'import':
+      return <Inbox className="h-5 w-5" />;
+    case 'nursery':
+      return <Package className="h-5 w-5" />;
+    case 'breedLab':
+      return <Dna className="h-5 w-5" />;
+    case 'exchange':
+      return <Users className="h-5 w-5" />;
+    default:
+      return <Zap className="h-5 w-5" />;
+  }
+}
+
+function actionCta(action: SuggestedAction, screen: Screen | null) {
+  if (screen === 'import') return 'Open import';
+  if (screen === 'nursery') return 'Open nursery';
+  if (screen === 'lineage') return 'Open lineage';
+  return `${action.method} ${action.endpoint}`;
+}
 
 const stagger = {
   hidden: {},
@@ -124,7 +159,7 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
                 Discord
               </div>
               <div className="mt-1 font-mono font-semibold text-white">
-                {homePayload.connected_identity.discordHandle}
+                {homePayload.connected_identity.discordHandle ?? homePayload.connected_identity.discordUserId}
               </div>
             </div>
           )}
@@ -155,29 +190,35 @@ export function Home({ homePayload, loading, onNavigate }: HomeProps) {
         <motion.div variants={fadeUp} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[...homePayload.suggested_actions]
             .sort((a, b) => a.priority - b.priority)
-            .map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                onClick={() => onNavigate(action.screen)}
-                className="group flex flex-col gap-4 rounded-[10px] border border-white/10 p-5 text-left transition-colors hover:border-white/25"
-                style={{ background: 'var(--openclaw-glass)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-white/50">{ACTION_ICONS[action.screen]}</span>
-                  <span className="font-display text-[24px] leading-6 text-white">
-                    {action.label}
-                  </span>
-                </div>
-                <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
-                  {action.description}
-                </p>
-                <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] transition-colors group-hover:text-white">
-                  {action.cta}
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </div>
-              </button>
-            ))}
+            .map((action) => {
+              const targetScreen = inferSuggestedActionScreen(action);
+              const cta = actionCta(action, targetScreen);
+
+              return (
+                <button
+                  key={`${action.action}-${action.endpoint}`}
+                  type="button"
+                  disabled={!targetScreen}
+                  onClick={() => targetScreen && onNavigate(targetScreen)}
+                  className="group flex flex-col gap-4 rounded-[10px] border border-white/10 p-5 text-left transition-colors hover:border-white/25"
+                  style={{ background: 'var(--openclaw-glass)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/50">{actionIcon(targetScreen)}</span>
+                    <span className="font-display text-[24px] leading-6 text-white">
+                      {action.label}
+                    </span>
+                  </div>
+                  <p className="font-mono text-[10px] leading-4 text-[var(--openclaw-muted)]">
+                    {action.description}
+                  </p>
+                  <div className="mt-auto flex items-center gap-2 font-mono text-xs text-[var(--openclaw-muted)] transition-colors group-hover:text-white">
+                    {cta}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </button>
+              );
+            })}
         </motion.div>
       )}
 

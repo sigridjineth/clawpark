@@ -128,6 +128,7 @@ function SpecimenCard({ claw, specimen, selected, onSelect }: SpecimenCardProps)
       <button
         type="button"
         onClick={onSelect}
+        aria-label={`${selected ? 'Deselect' : 'Select'} ${claw.name}`}
         className={`mt-3 w-full rounded-[8px] border py-1.5 font-mono text-[11px] transition-colors ${
           selected
             ? 'border-white/30 bg-white/15 text-white'

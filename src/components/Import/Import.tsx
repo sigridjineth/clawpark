@@ -165,6 +165,7 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
               <button
                 type="button"
                 onClick={onClearPreview}
+                aria-label="Close import preview"
                 className="text-[var(--openclaw-muted)] transition-colors hover:text-white"
               >
                 <X className="h-5 w-5" />
@@ -250,7 +251,6 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
                 <div className="mb-2 jp-label">Warnings</div>
                 <ul className="space-y-1">
                   {record.warnings.map((w, i) => (
-                    // eslint-disable-next-line react/no-array-index-key
                     <li key={i} className="flex items-start gap-2 font-mono text-xs text-[var(--openclaw-muted)]">
                       <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                       {w}
@@ -265,11 +265,9 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
               className="rounded-[8px] border border-white/10 px-3 py-2 font-mono text-xs text-[var(--openclaw-muted)]"
               style={{ background: 'rgba(0,0,0,0.2)' }}
             >
-              <span className="text-[var(--openclaw-text)]">Provenance: </span>
-              {importPreview.specimen.provenance.badge}
-              {importPreview.specimen.provenance.importedFrom
-                ? ` · from ${importPreview.specimen.provenance.importedFrom}`
-                : ''}
+              <span className="text-[var(--openclaw-text)]">Import record: </span>
+              {record?.sourceKind ?? 'openclaw_zip'}
+              {record?.includedFiles.length ? ` · ${record.includedFiles.length} file(s)` : ''}
             </div>
 
             <div className="flex justify-end">

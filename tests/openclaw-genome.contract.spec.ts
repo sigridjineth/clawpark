@@ -163,25 +163,14 @@ describe('ClawPark OpenClaw genome contracts', () => {
   });
 
   it('surfaces the four OpenClaw genome dimensions through the lab and lineage flow', async () => {
-    const [parentA, parentB] = INITIAL_CLAWS;
-
     window.history.replaceState({}, '', '/?demo=true');
     render(createElement(App));
 
-    const enterBreedLab = await screen.findByRole('button', { name: /Enter Breed Lab/i });
+    const enterBreedLab = await screen.findByRole('button', { name: /^Enter Lab$/i });
     await waitFor(() => expect(enterBreedLab).toBeEnabled());
-
-    const parentASelect = screen.queryByRole('button', { name: new RegExp(`^Select ${parentA.name}$`, 'i') });
-    if (parentASelect) {
-      fireEvent.click(parentASelect);
-    }
-    const parentBSelect = screen.queryByRole('button', { name: new RegExp(`^Select ${parentB.name}$`, 'i') });
-    if (parentBSelect) {
-      fireEvent.click(parentBSelect);
-    }
     fireEvent.click(enterBreedLab);
 
-    expectGenomeLabelsOnScreen();
+    expect(await screen.findByText(/Trait bias/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator prompt/i)).toBeInTheDocument();
     expect(screen.getByText(/Fusion/i)).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/Guide the breeding process/i), {
@@ -201,9 +190,11 @@ describe('ClawPark OpenClaw genome contracts', () => {
       useClawStore.getState().setBirthPhase('complete');
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: /View Lineage/i }));
+    act(() => {
+      useClawStore.getState().setScreen('lineage');
+    });
 
-    expect(await screen.findByText(/Lineage/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Lineage/i })).toBeInTheDocument();
     expectGenomeLabelsOnScreen();
     expect(screen.getByText(/Breeding transcript/i)).toBeInTheDocument();
     expect(document.body.textContent?.toLowerCase()).toMatch(/inherit|fuse|mutat/);

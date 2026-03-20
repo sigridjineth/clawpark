@@ -1,10 +1,8 @@
-import type { MarketplaceServerConfig } from './config.ts';
-
-function serverUrl(config: MarketplaceServerConfig) {
+function serverUrl(config: { publicOrigin: string }) {
   return config.publicOrigin.replace(/\/+$/, '');
 }
 
-export function buildOpenApiSpec(config: MarketplaceServerConfig) {
+export function buildOpenApiSpec(config: { publicOrigin: string }) {
   return {
     openapi: '3.1.0',
     info: {

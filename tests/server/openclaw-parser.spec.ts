@@ -74,7 +74,7 @@ describe('openclaw bundle parsers', () => {
     }
   });
 
-  it('rejects restricted files', async () => {
+  it('skips restricted files and records a warning instead of rejecting the whole import', async () => {
     const { dir, zipPath } = createWorkspaceZip({
       'IDENTITY.md': '# Phantom',
       'SOUL.md': '# Soul',
@@ -82,7 +82,10 @@ describe('openclaw bundle parsers', () => {
     });
 
     try {
-      await expect(parseOpenClawWorkspaceZip(zipPath)).rejects.toThrow(/restricted files/i);
+      const result = await parseOpenClawWorkspaceZip(zipPath);
+      expect(result.claw.name).toBe('Phantom');
+      expect(result.manifest.warnings.some((warning) => /restricted file/i.test(warning))).toBe(true);
+      expect(result.manifest.includedFiles).toEqual(['IDENTITY.md', 'SOUL.md']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

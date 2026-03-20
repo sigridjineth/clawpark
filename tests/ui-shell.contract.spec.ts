@@ -9,6 +9,11 @@ function renderApp() {
   render(createElement(App));
 }
 
+async function openNursery() {
+  fireEvent.click(await screen.findByRole('button', { name: /^Nursery$/i }));
+  await screen.findByRole('button', { name: /^Select Sage$/i });
+}
+
 function clickClawCard(name: string) {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`^Select ${name}$`, 'i') }));
 }
@@ -25,13 +30,16 @@ describe('ClawPark catalogue-first UI contracts', () => {
     window.history.replaceState({}, '', '/');
   });
 
-  it('opens on the catalogue shell and only unlocks breeding after two picks', async () => {
+  it('opens on the home shell and only unlocks breeding after two picks in the nursery', async () => {
     renderApp();
 
     expect(await screen.findByText(/ClawPark/i)).toBeInTheDocument();
-    expect(screen.getByText(/specimens/i)).toBeInTheDocument();
+    expect(screen.getByText(/control room/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`${useClawStore.getState().claws.length}\\s+specimen`, 'i'))).toBeInTheDocument();
 
-    const enterBreedLab = screen.getByRole('button', { name: /Enter Breed Lab/i });
+    await openNursery();
+
+    const enterBreedLab = await screen.findByRole('button', { name: /^Enter Lab$/i });
     expect(enterBreedLab).toBeDisabled();
 
     clickClawCard('Sage');
@@ -43,27 +51,36 @@ describe('ClawPark catalogue-first UI contracts', () => {
     });
   });
 
-  it('opens a specimen dossier when a claw card is clicked', async () => {
+  it('navigates from the home shell into the nursery and exposes the selection controls', async () => {
     renderApp();
 
     await screen.findByText(/ClawPark/i);
-    fireEvent.click(screen.getByRole('button', { name: /^Sage$/i }));
+    await openNursery();
 
-    expect(await screen.findByText(/Specimen dossier/i)).toBeInTheDocument();
-    expect(screen.getByText(/Identity/i)).toBeInTheDocument();
-    expect(screen.getByText(/Soul/i)).toBeInTheDocument();
-    expect(screen.getByText(/Skills/i)).toBeInTheDocument();
-    expect(screen.getByText(/Tools/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Select Sage/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Select Sage$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Select Bolt$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Filters/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Enter Lab$/i })).toBeInTheDocument();
+  });
+
+  it('shows the Marketplace entry point in the mounted app shell', async () => {
+    renderApp();
+
+    expect(await screen.findByRole('button', { name: /Marketplace/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Marketplace$/i }));
+
+    expect(await screen.findByText(/Marketplace/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /My Claws/i })).toBeInTheDocument();
   });
 
   it('keeps the breed lab prediction and trait-bias controls in the main browse flow', async () => {
     renderApp();
 
     await screen.findByText(/ClawPark/i);
+    await openNursery();
     clickClawCard('Sage');
     clickClawCard('Bolt');
-    fireEvent.click(screen.getByRole('button', { name: /Enter Breed Lab/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Enter Lab$/i }));
 
     expect(await screen.findByText(/Trait bias/i)).toBeInTheDocument();
     expect(screen.getByText(/Expected inheritance/i)).toBeInTheDocument();
@@ -77,15 +94,16 @@ describe('ClawPark catalogue-first UI contracts', () => {
     });
   });
 
-  it('preserves the birth-to-lineage-to-gallery loop after breeding', async () => {
+  it('preserves the birth-to-lineage-to-nursery loop after breeding', async () => {
     const initialCount = useClawStore.getState().claws.length;
 
     renderApp();
 
     await screen.findByText(/ClawPark/i);
+    await openNursery();
     clickClawCard('Sage');
     clickClawCard('Bolt');
-    fireEvent.click(screen.getByRole('button', { name: /Enter Breed Lab/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Enter Lab$/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Initiate Breeding/i }));
 
     await waitFor(() => {
@@ -97,15 +115,17 @@ describe('ClawPark catalogue-first UI contracts', () => {
       useClawStore.getState().setBirthPhase('complete');
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: /View Lineage/i }));
+    act(() => {
+      useClawStore.getState().setScreen('lineage');
+    });
 
-    expect(await screen.findByText(/Lineage/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Save child to gallery/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Lineage/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save to nursery/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Save child to gallery/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save to nursery/i }));
 
     await waitFor(() => {
-      expect(useClawStore.getState().screen).toBe('gallery');
+      expect(useClawStore.getState().screen).toBe('nursery');
       expect(useClawStore.getState().claws).toHaveLength(initialCount + 1);
       expect(useClawStore.getState().selectedIds).toEqual([]);
     });

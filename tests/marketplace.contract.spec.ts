@@ -330,6 +330,18 @@ describe('marketplace integration contracts', () => {
 
     expect(await screen.findByText(/Sage/i)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Buy \$340/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Search names, archetypes, soul, skills/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Sort/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Sale State/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Generation/i)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /^Inspect$/i })[0]!);
+    expect(await screen.findByText(/Selected listing/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Sale State/i), { target: { value: 'registry' } });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Buy \$340/i })).not.toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText(/Search names, archetypes, soul, skills/i), { target: { value: 'sage' } });
+    expect(screen.getByText(/Sage/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /My Claws/i }));
 
@@ -338,8 +350,11 @@ describe('marketplace integration contracts', () => {
     await waitFor(() => expect(screen.getByText(/Listed Ridgeback/i)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /Browse/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Search names, archetypes, soul, skills/i), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/Sale State/i), { target: { value: 'all' } });
     fireEvent.click(await screen.findByRole('button', { name: /Buy \$340/i }));
     await waitFor(() => expect(screen.getAllByText(/You purchased Solstice Sentinel/i).length).toBeGreaterThan(0));
+    expect(screen.getByText(/Purchase receipt/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /My Claws/i }));
     await waitFor(() => expect(screen.getAllByText(/Solstice Sentinel/i).length).toBeGreaterThan(0));
