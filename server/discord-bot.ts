@@ -10,7 +10,6 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { parseDiscordMessage, stripBotPrefix } from './discordIntent.ts';
 import { createOpenRouterClient } from './openrouter.ts';
-import { parseOpenClawWorkspaceZip } from './openclawParser.ts';
 import {
   cancelIntent,
   checkEligibilityAndConsent,

@@ -7,6 +7,7 @@ import * as api from '../services/clawparkApi';
 import type { HomePayload } from '../types/home';
 import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
 import type { ImportPreview, Specimen } from '../types/specimen';
+import { DEMO_PARENT_IDS } from '../utils/demoMode';
 
 interface ClawStore {
   // Server state
@@ -45,6 +46,8 @@ interface ClawStore {
   setScreen: (screen: Screen) => void;
 
   breedCount: number;
+  demoMode: boolean;
+  loadDemoPair: () => void;
 
   // API actions
   fetchHome: () => Promise<void>;
@@ -81,6 +84,7 @@ export function createInitialStoreState() {
     birthPhase: 'merge' as BirthPhase,
     screen: 'home' as Screen,
     breedCount: 0,
+    demoMode: false,
   };
 }
 
@@ -170,6 +174,7 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       breedCount: state.breedCount,
       breedPrompt: state.breedPrompt,
       breedingConversation: state.breedingConversation,
+      demoMode: state.demoMode,
       seed: Date.now() + state.breedCount,
     });
 
@@ -188,13 +193,14 @@ export const useClawStore = create<ClawStore>((set, get) => ({
   addChildToGallery: () => {
     const result = get().breedResult;
     if (!result) return;
+    const preserveDemoSelection = get().demoMode;
 
     set((state) => {
       const exists = state.claws.some((claw) => claw.id === result.child.id);
       const nextClaws = exists ? state.claws : [result.child, ...state.claws];
       return {
         claws: nextClaws,
-        selectedIds: [],
+        selectedIds: preserveDemoSelection ? [...DEMO_PARENT_IDS] : [],
         preferredTraitId: null,
         breedPrompt: 'Tell me what kind of child should survive this hatch.',
         breedingConversation: [],
@@ -203,6 +209,10 @@ export const useClawStore = create<ClawStore>((set, get) => ({
         birthPhase: 'merge' as BirthPhase,
       };
     });
+
+    if (preserveDemoSelection) {
+      get().computePrediction();
+    }
   },
 
   persistChildToGallery: () => {
@@ -223,6 +233,17 @@ export const useClawStore = create<ClawStore>((set, get) => ({
 
   setBirthPhase: (phase) => set({ birthPhase: phase }),
   setScreen: (screen) => set({ screen }),
+  loadDemoPair: () => {
+    set({
+      demoMode: true,
+      selectedIds: [...DEMO_PARENT_IDS],
+      preferredTraitId: null,
+      breedResult: null,
+      birthPhase: 'merge',
+      screen: 'nursery',
+    });
+    get().computePrediction();
+  },
 
 
   // API actions

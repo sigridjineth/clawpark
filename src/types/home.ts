@@ -1,23 +1,16 @@
-// Stub types — worker-1 will replace with authoritative server contract.
-// Matches the expected /api/v1/home HomePayload shape.
-
 export interface SuggestedAction {
-  id: string;
+  action: string;
   label: string;
   description: string;
-  cta: string;
-  screen: 'import' | 'nursery' | 'breedLab' | 'exchange';
-  priority: number;
-  endpoint?: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | string;
+  endpoint: string;
   params?: Record<string, string>;
+  priority: number;
 }
 
 export interface ConnectedIdentity {
   discordUserId: string;
-  discordHandle: string;
-  avatarUrl?: string;
-  verifiedAt: string;
+  discordHandle?: string;
 }
 
 export interface HomePayload {
@@ -28,4 +21,5 @@ export interface HomePayload {
   what_to_do_next: string;
   suggested_actions: SuggestedAction[];
   connected_identity: ConnectedIdentity | null;
+  onboarding_state: 'none' | 'discord_linked';
 }

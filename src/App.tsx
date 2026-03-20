@@ -6,13 +6,16 @@ import { Connect } from './components/Connect/Connect';
 import { Home } from './components/Home/Home';
 import { Import } from './components/Import/Import';
 import { LineageGraph } from './components/Lineage/LineageGraph';
+import { Marketplace } from './components/Marketplace/Marketplace';
 import { Nursery } from './components/Nursery/Nursery';
 import { getSelectedClaws, useClawStore } from './store/useClawStore';
 import type { Claw, Screen } from './types/claw';
+import { isDemoModeFromSearch } from './utils/demoMode';
 
 const NAV_SCREENS: Array<{ screen: Screen; label: string }> = [
   { screen: 'home', label: 'Home' },
   { screen: 'nursery', label: 'Nursery' },
+  { screen: 'exchange', label: 'Marketplace' },
   { screen: 'breedLab', label: 'Lab' },
   { screen: 'import', label: 'Import' },
   { screen: 'connect', label: 'Connect' },
@@ -42,6 +45,10 @@ function GlassNavbar({
   const highlightedScreen = hovered ?? activeScreen;
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setPrefersReducedMotion(mq.matches);
     update();
@@ -158,6 +165,9 @@ function App() {
     fetchSpecimens,
     importClaw,
     claimClaw,
+    claimMarketplaceClaw,
+    importClaws,
+    loadDemoPair,
   } = useClawStore();
 
   const [homeLoading, setHomeLoading] = useState(true);
@@ -169,6 +179,18 @@ function App() {
     setHomeLoading(true);
     void Promise.all([fetchHome(), fetchSpecimens()]).finally(() => setHomeLoading(false));
   }, [fetchHome, fetchSpecimens]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('marketplace')) {
+      setScreen('exchange');
+      return;
+    }
+
+    if (isDemoModeFromSearch(window.location.search)) {
+      loadDemoPair();
+    }
+  }, [loadDemoPair, setScreen]);
 
   const parentPair = useMemo<[Claw, Claw] | null>(() => {
     if (selectedClaws.length === 2) {
@@ -277,6 +299,23 @@ function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Connect connectedIdentity={homePayload?.connected_identity ?? null} />
+              </motion.div>
+            )}
+
+            {screen === 'exchange' && (
+              <motion.div
+                key="exchange"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Marketplace
+                  ownedClaws={claws}
+                  onClaim={claimMarketplaceClaw}
+                  onImport={importClaws}
+                  onBack={() => setScreen('home')}
+                />
               </motion.div>
             )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BadgePlus, Download, LogIn, ShieldCheck, Sparkles, Upload } from 'lucide-react';
+import { ArrowLeft, BadgePlus, Download, LogIn, Search, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import {
   buildClawTalkProfile,
   getClawIdentity,
@@ -45,6 +45,7 @@ import type {
   MockListingSnapshot,
   MockMeResponse,
   MockProvenanceResponse,
+  MockPurchaseResponse,
   MockSpecimenDetailResponse,
   MockTransactionEvent,
 } from '../../types/mockCommerce';
@@ -60,6 +61,15 @@ interface MarketplaceProps {
 
 type MarketplaceTab = 'browse' | 'portfolio' | 'publish';
 type BrowseKind = 'claw' | 'skill';
+type BrowseSort = 'newest' | 'name' | 'price-asc' | 'price-desc' | 'generation-desc' | 'generation-asc';
+type ClawBrowseFilter = 'all' | 'registry' | 'published' | 'delisted' | 'sold';
+type GenerationFilter = 'all' | 'gen-1' | 'gen-2' | 'gen-3-plus';
+
+interface MarketplaceReceipt {
+  title: string;
+  summary: string;
+  details: string[];
+}
 
 function trustTone(listing: MarketplaceListing) {
   return listing.trust === 'verified'
@@ -116,6 +126,17 @@ function defaultPrice(value?: number | null) {
   return String(value ?? 180);
 }
 
+function buildPurchaseReceipt(receipt: MockPurchaseResponse): MarketplaceReceipt {
+  return {
+    title: 'Purchase receipt',
+    summary: receipt.buyerReceipt.summary,
+    details: [
+      receipt.sellerReceipt.summary,
+      `Specimen ${receipt.transfer.specimenId} transferred at ${new Date(receipt.transfer.completedAt).toLocaleString()}.`,
+    ],
+  };
+}
+
 export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: MarketplaceProps) {
   const uploadRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -126,6 +147,10 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
     return params.get('marketplace') === 'publish' ? 'publish' : 'browse';
   });
   const [browseKind, setBrowseKind] = useState<BrowseKind>('claw');
+  const [browseQuery, setBrowseQuery] = useState('');
+  const [browseSort, setBrowseSort] = useState<BrowseSort>('newest');
+  const [clawBrowseFilter, setClawBrowseFilter] = useState<ClawBrowseFilter>('all');
+  const [generationFilter, setGenerationFilter] = useState<GenerationFilter>('all');
   const [session, setSession] = useState<MarketplaceSession>({ user: null, authConfigured: false });
   const [listings, setListings] = useState<MarketplaceListing[]>(MARKETPLACE_SEED_LISTINGS);
   const [mockListings, setMockListings] = useState<MockListingSnapshot[]>([]);
@@ -147,6 +172,8 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
   const [selectedSpecimen, setSelectedSpecimen] = useState<MockSpecimenDetailResponse | null>(null);
   const [selectedProvenance, setSelectedProvenance] = useState<MockProvenanceResponse | null>(null);
   const [selectedSpecimenId, setSelectedSpecimenId] = useState<string | null>(null);
+  const [selectedBrowseListing, setSelectedBrowseListing] = useState<MarketplaceListing | MockListingSnapshot | null>(null);
+  const [latestReceipt, setLatestReceipt] = useState<MarketplaceReceipt | null>(null);
   const [breedParentA, setBreedParentA] = useState('');
   const [breedParentB, setBreedParentB] = useState('');
   const [breedPrompt, setBreedPrompt] = useState('Raise a resilient child who can survive the park.');
@@ -232,6 +259,89 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
     () => [...mockListings, ...registryClawListings],
     [mockListings, registryClawListings],
   );
+  const normalizedBrowseQuery = browseQuery.trim().toLowerCase();
+  const filteredSkillListings = useMemo(() => {
+    const filtered = skillListings.filter((listing) => {
+      if (!normalizedBrowseQuery) return true;
+      const haystack = [
+        listing.title,
+        listing.summary,
+        listing.skill.name,
+        listing.skill.description,
+        listing.skill.slug,
+      ].join(' ').toLowerCase();
+      return haystack.includes(normalizedBrowseQuery);
+    });
+
+    return [...filtered].sort((left, right) => {
+      if (browseSort === 'name') return left.title.localeCompare(right.title);
+      return new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime();
+    });
+  }, [browseSort, normalizedBrowseQuery, skillListings]);
+  const filteredClawListings = useMemo(() => {
+    const filtered = combinedClawListings.filter((listing) => {
+      const haystack = isMockListingSnapshot(listing)
+        ? [
+            listing.claw.name,
+            listing.claw.archetype,
+            listing.seller.displayName,
+            listing.owner.displayName,
+            summarizeSoul(listing.claw),
+            summarizeSkills(listing.claw),
+          ].join(' ').toLowerCase()
+        : [
+            listing.title,
+            listing.summary,
+            listing.claw.name,
+            listing.claw.archetype,
+            publisherLabel(listing),
+            summarizeSoul(listing.claw),
+            summarizeSkills(listing.claw),
+          ].join(' ').toLowerCase();
+
+      if (normalizedBrowseQuery && !haystack.includes(normalizedBrowseQuery)) return false;
+
+      if (generationFilter === 'gen-1' && listing.claw.generation !== 1) return false;
+      if (generationFilter === 'gen-2' && listing.claw.generation !== 2) return false;
+      if (generationFilter === 'gen-3-plus' && listing.claw.generation < 3) return false;
+
+      if (clawBrowseFilter === 'registry' && isMockListingSnapshot(listing)) return false;
+      if (clawBrowseFilter !== 'all' && clawBrowseFilter !== 'registry' && isMockListingSnapshot(listing)) {
+        return listing.saleState === clawBrowseFilter;
+      }
+      if (clawBrowseFilter !== 'all' && clawBrowseFilter !== 'registry' && !isMockListingSnapshot(listing)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const priceValue = (listing: MarketplaceClawListing | MockListingSnapshot) => {
+      if (isMockListingSnapshot(listing)) return listing.price.amount;
+      return Number.POSITIVE_INFINITY;
+    };
+
+    return [...filtered].sort((left, right) => {
+      switch (browseSort) {
+        case 'name':
+          return left.claw.name.localeCompare(right.claw.name);
+        case 'price-asc':
+          return priceValue(left) - priceValue(right);
+        case 'price-desc':
+          return priceValue(right) - priceValue(left);
+        case 'generation-asc':
+          return left.claw.generation - right.claw.generation;
+        case 'generation-desc':
+          return right.claw.generation - left.claw.generation;
+        case 'newest':
+        default: {
+          const leftPublishedAt = isMockListingSnapshot(left) ? left.saleLifecycle.publishedAt : left.publishedAt;
+          const rightPublishedAt = isMockListingSnapshot(right) ? right.saleLifecycle.publishedAt : right.publishedAt;
+          return new Date(rightPublishedAt ?? 0).getTime() - new Date(leftPublishedAt ?? 0).getTime();
+        }
+      }
+    });
+  }, [browseSort, clawBrowseFilter, combinedClawListings, generationFilter, normalizedBrowseQuery]);
   const eligibleParents = useMemo(
     () => (myClaws?.items ?? []).filter((item) => item.breeding.isEligible),
     [myClaws],
@@ -247,7 +357,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
         setStatusMessage(parsed.error);
       } else {
         onImport(parsed.claws);
-        setStatusMessage(`Imported ${parsed.claws.length} specimen(s) into your gallery.`);
+        setStatusMessage(`Imported ${parsed.claws.length} specimen(s) into your nursery.`);
       }
       if (importRef.current) importRef.current.value = '';
     };
@@ -366,7 +476,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
 
   const handleSyncToGallery = (claw: Claw) => {
     onClaim(claw);
-    setStatusMessage(`${claw.name} synced into the local gallery.`);
+    setStatusMessage(`${claw.name} synced into the local nursery.`);
   };
 
   const handleInspectSpecimen = async (specimenId: string, clawId: string) => {
@@ -391,6 +501,14 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       await loadCommerceData();
       setTab('portfolio');
       setStatusMessage(`Listed ${listing.claw.name} for ${listing.price.formatted}.`);
+      setLatestReceipt({
+        title: 'Listing created',
+        summary: `${listing.claw.name} is now published for ${listing.price.formatted}.`,
+        details: [
+          `Sale state: ${listing.saleState}`,
+          `Listing slug: ${listing.slug}`,
+        ],
+      });
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to list specimen.');
     } finally {
@@ -405,6 +523,14 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       const listing = await updateMockMarketplaceListingPrice(slug, { price: { amount } });
       await loadCommerceData();
       setStatusMessage(`Updated ${listing.claw.name} to ${listing.price.formatted}.`);
+      setLatestReceipt({
+        title: 'Price updated',
+        summary: `${listing.claw.name} is now listed at ${listing.price.formatted}.`,
+        details: [
+          `Sale state: ${listing.saleState}`,
+          `Listing slug: ${listing.slug}`,
+        ],
+      });
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to update price.');
     } finally {
@@ -418,6 +544,14 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       const listing = await delistMockMarketplaceListing(slug);
       await loadCommerceData();
       setStatusMessage(`${listing.claw.name} returned to your inventory.`);
+      setLatestReceipt({
+        title: 'Listing delisted',
+        summary: `${listing.claw.name} returned to your inventory.`,
+        details: [
+          `Sale state: ${listing.saleState}`,
+          `Listing slug: ${listing.slug}`,
+        ],
+      });
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to delist specimen.');
     } finally {
@@ -431,6 +565,14 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       const listing = await relistMockMarketplaceListing(slug);
       await loadCommerceData();
       setStatusMessage(`${listing.claw.name} relisted for ${listing.price.formatted}.`);
+      setLatestReceipt({
+        title: 'Listing relisted',
+        summary: `${listing.claw.name} relisted for ${listing.price.formatted}.`,
+        details: [
+          `Sale state: ${listing.saleState}`,
+          `Listing slug: ${listing.slug}`,
+        ],
+      });
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to relist specimen.');
     } finally {
@@ -445,6 +587,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       await loadCommerceData();
       setTab('portfolio');
       setStatusMessage(receipt.buyerReceipt.summary);
+      setLatestReceipt(buildPurchaseReceipt(receipt));
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to purchase specimen.');
     } finally {
@@ -471,7 +614,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       setLastBreed(result);
       onClaim(result.child.claw);
       await loadCommerceData();
-      setStatusMessage(`${result.child.claw.name} was bred and synced into the local gallery.`);
+      setStatusMessage(`${result.child.claw.name} was bred and synced into the local nursery.`);
       setTab('portfolio');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to run mock breeding.');
@@ -486,7 +629,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
     <section className="space-y-4">
       <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-bone-muted transition hover:text-bone">
         <ArrowLeft className="h-4 w-4" />
-        Gallery
+        Home
       </button>
 
       <div className="jp-card p-5">
@@ -524,9 +667,21 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
           </button>
         </div>
 
-        {apiNotice && <div className="mt-4 rounded-md border border-amber/20 bg-amber/10 px-3 py-2 text-sm text-amber">{apiNotice}</div>}
-        {commerceNotice && <div className="mt-3 rounded-md border border-amber/20 bg-jungle-900/70 px-3 py-2 text-sm text-bone-dim">{commerceNotice}</div>}
-        {statusMessage && <div className="mt-3 rounded-md border border-fern/30 bg-fern/10 px-3 py-2 text-sm text-fern">{statusMessage}</div>}
+        {apiNotice && (
+          <div role="status" aria-live="polite" className="mt-4 rounded-md border border-amber/20 bg-amber/10 px-3 py-2 text-sm text-amber">
+            {apiNotice}
+          </div>
+        )}
+        {commerceNotice && (
+          <div role="status" aria-live="polite" className="mt-3 rounded-md border border-amber/20 bg-jungle-900/70 px-3 py-2 text-sm text-bone-dim">
+            {commerceNotice}
+          </div>
+        )}
+        {statusMessage && (
+          <div role="status" aria-live="polite" className="mt-3 rounded-md border border-fern/30 bg-fern/10 px-3 py-2 text-sm text-fern">
+            {statusMessage}
+          </div>
+        )}
       </div>
 
       {tab === 'browse' && (
@@ -541,9 +696,71 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
               </button>
             </div>
 
+            <div className="jp-card grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+              <label className="block text-xs uppercase tracking-[0.25em] text-bone-muted">
+                Search
+                <div className="mt-2 flex items-center gap-2 rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2">
+                  <Search className="h-4 w-4 text-bone-muted" />
+                  <input
+                    value={browseQuery}
+                    onChange={(event) => setBrowseQuery(event.target.value)}
+                    placeholder={browseKind === 'skill' ? 'Search skills, slugs, summaries…' : 'Search names, archetypes, soul, skills…'}
+                    className="w-full bg-transparent text-sm text-bone outline-none placeholder:text-bone-muted"
+                  />
+                </div>
+              </label>
+
+              <label className="block text-xs uppercase tracking-[0.25em] text-bone-muted">
+                Sort
+                <select
+                  value={browseSort}
+                  onChange={(event) => setBrowseSort(event.target.value as BrowseSort)}
+                  className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-sm text-bone outline-none transition focus:border-amber/40"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="name">Name</option>
+                  <option value="price-asc">Price ↑</option>
+                  <option value="price-desc">Price ↓</option>
+                  <option value="generation-desc">Generation ↓</option>
+                  <option value="generation-asc">Generation ↑</option>
+                </select>
+              </label>
+
+              <label className="block text-xs uppercase tracking-[0.25em] text-bone-muted">
+                Sale State
+                <select
+                  value={clawBrowseFilter}
+                  onChange={(event) => setClawBrowseFilter(event.target.value as ClawBrowseFilter)}
+                  className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-sm text-bone outline-none transition focus:border-amber/40"
+                  disabled={browseKind === 'skill'}
+                >
+                  <option value="all">All</option>
+                  <option value="registry">Registry only</option>
+                  <option value="published">Published</option>
+                  <option value="delisted">Delisted</option>
+                  <option value="sold">Sold</option>
+                </select>
+              </label>
+
+              <label className="block text-xs uppercase tracking-[0.25em] text-bone-muted">
+                Generation
+                <select
+                  value={generationFilter}
+                  onChange={(event) => setGenerationFilter(event.target.value as GenerationFilter)}
+                  className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-sm text-bone outline-none transition focus:border-amber/40"
+                  disabled={browseKind === 'skill'}
+                >
+                  <option value="all">All gens</option>
+                  <option value="gen-1">Gen 1</option>
+                  <option value="gen-2">Gen 2</option>
+                  <option value="gen-3-plus">Gen 3+</option>
+                </select>
+              </label>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               {browseKind === 'skill'
-                ? skillListings.map((listing) => (
+                ? filteredSkillListings.map((listing) => (
                     <article key={listing.slug} className="jp-card flex flex-col gap-4 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -574,6 +791,13 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                       <div className="mt-auto flex flex-wrap gap-2">
                         <button
                           type="button"
+                          onClick={() => setSelectedBrowseListing(listing)}
+                          className="jp-btn-secondary flex-1 text-xs"
+                        >
+                          Inspect
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => void handleInstallListing(listing)}
                           className="jp-btn flex-1 text-xs"
                           disabled={installingSlug === listing.slug}
@@ -601,7 +825,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                       </div>
                     </article>
                   ))
-                : combinedClawListings.map((listing) => {
+                : filteredClawListings.map((listing) => {
                     if (isMockListingSnapshot(listing)) {
                       const mine = me?.userId === listing.owner.userId;
                       const inGallery = galleryClawIds.has(listing.claw.id);
@@ -629,6 +853,13 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                           </div>
 
                           <div className="mt-auto flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBrowseListing(listing)}
+                              className="jp-btn-secondary text-xs"
+                            >
+                              Inspect
+                            </button>
                             <button
                               type="button"
                               onClick={() => void handleBuyListing(listing.slug)}
@@ -684,6 +915,13 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                         )}
 
                         <div className="mt-auto flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBrowseListing(listing)}
+                            className="jp-btn-secondary text-xs"
+                          >
+                            Inspect
+                          </button>
                           <button type="button" onClick={() => onClaim(listing.claw)} className="jp-btn flex-1 text-xs" disabled={owned}>
                             {owned ? 'Owned' : 'Claim'}
                           </button>
@@ -700,6 +938,12 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                       </article>
                     );
                   })}
+              {browseKind === 'skill' && filteredSkillListings.length === 0 && (
+                <div className="jp-card p-5 text-sm text-bone-dim">No skill listings match your current search.</div>
+              )}
+              {browseKind === 'claw' && filteredClawListings.length === 0 && (
+                <div className="jp-card p-5 text-sm text-bone-dim">No claw listings match your current filters.</div>
+              )}
             </div>
           </div>
 
@@ -717,6 +961,60 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
               <li>• Use portfolio actions to list, delist, relist, and breed owned specimens.</li>
               <li>• Skill listings can install directly into the local OpenClaw skills directory when the marketplace API is running on this machine.</li>
             </ul>
+
+            {selectedBrowseListing && (
+              <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4">
+                <div className="jp-label">Selected listing</div>
+                {'kind' in selectedBrowseListing && selectedBrowseListing.kind === 'skill' ? (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <h4 className="font-display text-2xl text-bone">{selectedBrowseListing.title}</h4>
+                      <p className="mt-1 text-sm text-bone-muted">{selectedBrowseListing.summary}</p>
+                    </div>
+                    <div className="space-y-2 text-sm text-bone-dim">
+                      <p><span className="text-bone">Slug.</span> {selectedBrowseListing.skill.slug}</p>
+                      <p><span className="text-bone">Entrypoint.</span> {selectedBrowseListing.skill.entrypoint}</p>
+                      <p><span className="text-bone">Scripts.</span> {selectedBrowseListing.skill.scriptFiles.length ? selectedBrowseListing.skill.scriptFiles.join(', ') : 'None'}</p>
+                      <p><span className="text-bone">References.</span> {selectedBrowseListing.skill.referenceFiles.length ? selectedBrowseListing.skill.referenceFiles.join(', ') : 'None'}</p>
+                    </div>
+                    <div className="rounded-md border border-jungle-700 bg-jungle-950 px-3 py-2 text-xs text-bone-dim">
+                      {selectedBrowseListing.installHint}
+                    </div>
+                  </div>
+                ) : isMockListingSnapshot(selectedBrowseListing) ? (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <h4 className="font-display text-2xl text-bone">{selectedBrowseListing.claw.name}</h4>
+                      <p className="mt-1 text-sm text-amber">{selectedBrowseListing.claw.archetype}</p>
+                    </div>
+                    <div className="space-y-2 text-sm text-bone-dim">
+                      <p><span className="text-bone">Sale state.</span> {selectedBrowseListing.saleState}</p>
+                      <p><span className="text-bone">Price.</span> {selectedBrowseListing.price.formatted}</p>
+                      <p><span className="text-bone">Seller.</span> {selectedBrowseListing.seller.displayName}</p>
+                      <p><span className="text-bone">Owner.</span> {selectedBrowseListing.owner.displayName}</p>
+                      <p><span className="text-bone">Generation.</span> Gen {selectedBrowseListing.claw.generation}</p>
+                      <p><span className="text-bone">Soul.</span> {summarizeSoul(selectedBrowseListing.claw)}</p>
+                      <p><span className="text-bone">Skills.</span> {summarizeSkills(selectedBrowseListing.claw)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <h4 className="font-display text-2xl text-bone">{selectedBrowseListing.title}</h4>
+                      <p className="mt-1 text-sm text-amber">{selectedBrowseListing.claw.archetype}</p>
+                    </div>
+                    <div className="space-y-2 text-sm text-bone-dim">
+                      <p><span className="text-bone">Publisher.</span> {publisherLabel(selectedBrowseListing)}</p>
+                      <p><span className="text-bone">Trust.</span> {selectedBrowseListing.trust}</p>
+                      <p><span className="text-bone">Generation.</span> Gen {selectedBrowseListing.claw.generation}</p>
+                      <p><span className="text-bone">Identity.</span> {buildClawTalkProfile(selectedBrowseListing.claw).identity}</p>
+                      <p><span className="text-bone">Soul.</span> {summarizeSoul(selectedBrowseListing.claw)}</p>
+                      <p><span className="text-bone">Skills.</span> {summarizeSkills(selectedBrowseListing.claw)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
         </div>
       )}
@@ -729,7 +1027,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                 <div>
                   <div className="jp-label">Portfolio</div>
                   <h3 className="mt-2 font-display text-3xl text-bone">My Claws</h3>
-                  <p className="mt-2 text-sm text-bone-muted">See owned specimens, manage listings, run mock breeding, and sync purchased or newborn claws into the local gallery.</p>
+                  <p className="mt-2 text-sm text-bone-muted">See owned specimens, manage listings, run mock breeding, and sync purchased or newborn claws into the local nursery.</p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 px-4 py-3 text-sm text-bone-dim">
@@ -813,7 +1111,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                         Inspect
                       </button>
                       <button type="button" onClick={() => handleSyncToGallery(item.claw)} className="jp-btn-secondary text-xs" disabled={inGallery}>
-                        {inGallery ? 'In Gallery' : 'Add to Gallery'}
+                        {inGallery ? 'In Nursery' : 'Add to Nursery'}
                       </button>
                     </div>
                   </article>
@@ -856,7 +1154,7 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
               {lastBreed && (
                 <div className="rounded-lg border border-fern/30 bg-fern/10 p-4 text-sm text-bone-dim">
                   <div className="font-display text-2xl text-bone">{lastBreed.child.claw.name}</div>
-                  <p className="mt-2">Newborn synced into your local gallery. Next actions: {lastBreed.nextActions.join(' · ')}</p>
+                  <p className="mt-2">Newborn synced into your local nursery. Next actions: {lastBreed.nextActions.join(' · ')}</p>
                 </div>
               )}
             </section>
@@ -877,6 +1175,23 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
                 {transactions.length === 0 && <p>No transaction history yet.</p>}
               </div>
             </section>
+
+            {latestReceipt && (
+              <section className="jp-card space-y-4 p-5">
+                <div>
+                  <div className="jp-label">Latest marketplace action</div>
+                  <h3 className="mt-2 font-display text-3xl text-bone">{latestReceipt.title}</h3>
+                </div>
+                <p className="text-sm text-bone" role="status" aria-live="polite">{latestReceipt.summary}</p>
+                <div className="space-y-2 text-sm text-bone-dim">
+                  {latestReceipt.details.map((detail) => (
+                    <div key={detail} className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-3">
+                      {detail}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {(selectedSpecimen || selectedProvenance) && (
               <section className="jp-card space-y-4 p-5">

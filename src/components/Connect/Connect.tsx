@@ -44,20 +44,12 @@ export function Connect({ connectedIdentity, discordAuthUrl }: ConnectProps) {
         <motion.div variants={fadeUp} className="jp-card space-y-4 p-5">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
-              {connectedIdentity.avatarUrl ? (
-                <img
-                  src={connectedIdentity.avatarUrl}
-                  alt={connectedIdentity.discordHandle}
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                <User className="h-6 w-6 text-[var(--openclaw-muted)]" />
-              )}
+              <User className="h-6 w-6 text-[var(--openclaw-muted)]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display text-[22px] leading-6 text-white">
-                  {connectedIdentity.discordHandle}
+                  {connectedIdentity.discordHandle ?? 'Discord connected'}
                 </span>
                 <ShieldCheck className="h-4 w-4 text-[rgba(61,235,186,0.8)]" />
               </div>
@@ -65,12 +57,7 @@ export function Connect({ connectedIdentity, discordAuthUrl }: ConnectProps) {
                 ID: {connectedIdentity.discordUserId}
               </div>
               <div className="mt-1 font-mono text-xs text-[var(--openclaw-muted)]">
-                Verified{' '}
-                {new Date(connectedIdentity.verifiedAt).toLocaleDateString(undefined, {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+                Discord session linked
               </div>
             </div>
           </div>

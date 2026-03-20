@@ -30,7 +30,7 @@ describe("ClawPark demo mode contracts", () => {
     window.history.replaceState({}, "", "/?demo=true");
     render(createElement(App));
 
-    const enterBreedLab = await screen.findByRole("button", { name: /Enter Breed Lab/i });
+    const enterBreedLab = await screen.findByRole("button", { name: /Enter Lab/i });
     await waitFor(() => expect(enterBreedLab).toBeEnabled());
 
     fireEvent.click(enterBreedLab);
@@ -55,10 +55,10 @@ describe("ClawPark demo mode contracts", () => {
     });
 
     await waitFor(() => {
-      expect(useClawStore.getState().screen).toBe("gallery");
+      expect(useClawStore.getState().screen).toBe("nursery");
       expect(useClawStore.getState().selectedIds).toEqual(["claw-001", "claw-002"]);
       expect(useClawStore.getState().claws.some((claw) => claw.id === bredChildId)).toBe(true);
-      expect(screen.getByRole("button", { name: /Enter Breed Lab/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Enter Lab/i })).toBeEnabled();
     });
   });
 });

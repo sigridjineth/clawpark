@@ -76,7 +76,7 @@ export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineag
         <div className="flex flex-wrap justify-center gap-3">
           <button type="button" onClick={onViewLineage} className="jp-btn-secondary">View Lineage</button>
           <button type="button" onClick={onBreedAgain} className="jp-btn">Breed Again</button>
-          <button type="button" onClick={onBackToGallery} className="jp-btn-secondary">Gallery</button>
+          <button type="button" onClick={onBackToGallery} className="jp-btn-secondary">Nursery</button>
         </div>
       )}
     </section>
