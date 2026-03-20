@@ -322,11 +322,16 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
   });
 
   client.on(Events.MessageCreate, async (msg) => {
-    if (msg.author.bot) return;
+    // Allow other bots (OpenClaw agents) to interact — only skip our own messages
+    if (msg.author.id === client.user?.id) return;
 
     const isMentioned = client.user !== null && msg.mentions.has(client.user);
+    // Also check for role mentions that match the bot's name
+    const hasRoleMention = msg.content.includes(`<@&`) && msg.mentions.roles.some((role) =>
+      role.name.toLowerCase().includes('clawpark') || role.members.has(client.user?.id ?? ''),
+    );
     const hasPrefix = msg.content.startsWith('!breed');
-    if (!isMentioned && !hasPrefix) return;
+    if (!isMentioned && !hasRoleMention && !hasPrefix) return;
 
     try {
       await msg.channel.sendTyping();
