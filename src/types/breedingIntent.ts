@@ -83,6 +83,8 @@ export interface OrchestratorDeps {
   resolveSpecimenByName: (name: string) => ResolvedSpecimen | null;
   resolveSpecimenById: (id: string) => ResolvedSpecimen | null;
   listBreedableSpecimens: () => ResolvedSpecimen[];
+  listAllSpecimens?: () => ResolvedSpecimen[];
+  getSpecimenProfile?: (id: string) => SpecimenProfile | null;
   runBreed: (parentAId: string, parentBId: string, prompt?: string) => Promise<BreedRunResult>;
 }
 
@@ -91,6 +93,8 @@ export interface ResolvedSpecimen {
   name: string;
   ownerId: string | null;
   breedable: boolean;
+  ownershipState?: string;
+  breedState?: string;
 }
 
 export interface BreedRunResult {
@@ -99,3 +103,10 @@ export interface BreedRunResult {
   childName: string;
   lineageSummary: string;
 }
+
+export interface SpecimenProfile extends ResolvedSpecimen {
+  claw: Claw;
+  parentAId?: string | null;
+  parentBId?: string | null;
+}
+import type { Claw } from './claw';

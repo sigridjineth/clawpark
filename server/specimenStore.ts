@@ -42,8 +42,6 @@ export interface BreedingRunRow {
 }
 
 export function createSpecimenStore(db: SqliteDatabase) {
-  const CONSENT_TIMEOUT_HOURS = 24;
-
   const insertImport = db.prepare(`
     INSERT INTO import_records (id, source_kind, uploaded_at, included_files, ignored_files, warnings, fingerprint, parsed_specimen_id, discord_user_id)
     VALUES (?, 'openclaw_zip', ?, ?, ?, ?, ?, ?, ?)
@@ -264,34 +262,12 @@ export function createSpecimenStore(db: SqliteDatabase) {
     }) {
       const id = `prop-${randomUUID().slice(0, 8)}`;
       const now = new Date().toISOString();
-      const specA = this.getSpecimen(params.parentAId);
-      const specB = this.getSpecimen(params.parentBId);
-      const ownerA = specA?.discordUserId ?? null;
-      const ownerB = specB?.discordUserId ?? null;
-      const isAnonymous = params.requesterId === 'anonymous';
-      const bothUnowned = ownerA === null && ownerB === null;
-      const requesterOwnsA = ownerA === null || ownerA === params.requesterId;
-      const requesterOwnsB = ownerB === null || ownerB === params.requesterId;
-      const autoApprove = isAnonymous || bothUnowned || (requesterOwnsA && requesterOwnsB);
-      const consentStatus = autoApprove ? 'auto_approved' : 'pending';
+      const consentStatus = 'auto_approved';
 
       db.prepare(`
         INSERT INTO breeding_proposals (id, parent_a_id, parent_b_id, requester_id, consent_status, intent_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(id, params.parentAId, params.parentBId, params.requesterId, consentStatus, params.intentId ?? null, now);
-
-      if (!autoApprove) {
-        const expiresAt = new Date(Date.now() + CONSENT_TIMEOUT_HOURS * 60 * 60 * 1000).toISOString();
-        const owners = new Set<string>();
-        if (ownerA && ownerA !== params.requesterId) owners.add(ownerA);
-        if (ownerB && ownerB !== params.requesterId) owners.add(ownerB);
-        for (const owner of owners) {
-          db.prepare(`
-            INSERT INTO breeding_consents (id, proposal_id, owner_identity, status, responded_at, expires_at)
-            VALUES (?, ?, ?, 'pending', NULL, ?)
-          `).run(`con-${randomUUID().slice(0, 8)}`, id, owner, expiresAt);
-        }
-      }
 
       return db.prepare('SELECT * FROM breeding_proposals WHERE id = ?').get(id) as Record<string, unknown>;
     },

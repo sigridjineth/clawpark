@@ -229,7 +229,7 @@ describe('/api/v1 breeding flow', () => {
     }
   });
 
-  it('creates breeding intents/proposals and accepts cross-owner consent through /api/v1', async () => {
+  it('creates breeding intents/proposals without owner-based consent blocking through /api/v1', async () => {
     const parentAZip = createWorkspaceZip({
       'IDENTITY.md': '# Meridian\nName: Meridian\nCreature: Compass Parasaurolophus\nRole: The Cartographer\nDirective: Map every boundary in the enclosure.\nVibe: Methodical · Watchful\nEmoji: 🧭\n',
       'SOUL.md': '# Soul\nAnalyze the terrain and document the route.\n',
@@ -292,25 +292,11 @@ describe('/api/v1 breeding flow', () => {
       });
       expect(proposalResponse.status).toBe(201);
       const proposal = (await proposalResponse.json()) as { id: string; consent_status: string };
-      expect(proposal.consent_status).toBe('pending');
+      expect(proposal.consent_status).toBe('auto_approved');
       const consentRow = serverHandle.db.prepare(
         'SELECT expires_at FROM breeding_consents WHERE proposal_id = ?',
       ).get(proposal.id) as { expires_at: string } | undefined;
-      expect(consentRow).toBeTruthy();
-      const expiresAt = new Date(consentRow!.expires_at).getTime();
-      const now = Date.now();
-      const hoursUntilExpiry = (expiresAt - now) / (60 * 60 * 1000);
-      expect(hoursUntilExpiry).toBeGreaterThan(23);
-      expect(hoursUntilExpiry).toBeLessThan(25);
-
-      const consentResponse = await fetch(`${baseUrl}/api/v1/breeding/proposals/${proposal.id}/consent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Cookie: cookieB },
-        body: JSON.stringify({ status: 'approved' }),
-      });
-      expect(consentResponse.status).toBe(200);
-      const updated = (await consentResponse.json()) as { consent_status: string };
-      expect(updated.consent_status).toBe('approved');
+      expect(consentRow).toBeUndefined();
     } finally {
       rmSync(parentAZip.dir, { recursive: true, force: true });
       rmSync(parentBZip.dir, { recursive: true, force: true });

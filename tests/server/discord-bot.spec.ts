@@ -3,13 +3,23 @@ import { describe, expect, it } from 'vitest';
 import {
   containsPlainBotReference,
   displayCandidateName,
+  extractNumberSelections,
   formatCandidateSuggestionsReply,
+  isCountQuestion,
+  isExportQuestion,
+  isInheritanceQuestion,
+  formatCountReply,
+  formatInheritanceReply,
+  formatSpecimenSummary,
   extractLocalZipPath,
   isAllowedLocalZipPath,
   isLikelyPersuadeFollowUp,
   isSpecimenInventoryQuestion,
+  isSpecimenDetailQuestion,
+  wantsUseAllVisibleCandidates,
   resolvePersuadeTargets,
 } from '../../server/discord-bot.ts';
+import type { SpecimenProfile } from '../../src/types/breedingIntent.ts';
 
 describe('discord bot helpers', () => {
   it('detects plain-text bot references without a real Discord mention token', () => {
@@ -53,6 +63,19 @@ describe('discord bot helpers', () => {
     expect(isSpecimenInventoryQuestion('hello there')).toBe(false);
   });
 
+  it('detects count/detail/inheritance/export intents with simple heuristics', () => {
+    expect(isCountQuestion('how many claws in the registry?')).toBe(true);
+    expect(isSpecimenDetailQuestion('tell me the details of new Quartz')).toBe(true);
+    expect(isInheritanceQuestion('what things changed/inherited from its parent')).toBe(true);
+    expect(isExportQuestion('can you make it downloadable zip file for quartz?')).toBe(true);
+  });
+
+  it('extracts numbered selections and the use-both shorthand', () => {
+    expect(extractNumberSelections('can you breed 1 and 2')).toEqual([1, 2]);
+    expect(extractNumberSelections('use 2 then 1')).toEqual([2, 1]);
+    expect(wantsUseAllVisibleCandidates('okay got for 2 claws')).toBe(true);
+  });
+
   it('falls back to specimen id when a candidate name is blank', () => {
     expect(displayCandidateName({ specimenId: 'spec-123', name: '' })).toBe('spec-123');
     expect(displayCandidateName({ specimenId: 'spec-123', name: 'Ridgeback' })).toBe('Ridgeback');
@@ -93,5 +116,68 @@ describe('discord bot helpers', () => {
     expect(message).toContain('for **Ridgeback**');
     expect(message).toContain('**Orchid Glass**');
     expect(message).toContain('say **"proceed"**');
+  });
+
+  it('formats count replies with separated registry/owned/breedable counts', () => {
+    const message = formatCountReply([
+      { id: '1', name: 'khl7q5', ownerId: 'user-a', breedable: true },
+      { id: '2', name: 'dgxspark-claw', ownerId: 'user-b', breedable: true },
+      { id: '3', name: 'Quartz', ownerId: 'user-a', breedable: false },
+    ], 'user-a');
+    expect(message).toContain('Registry claws: 3');
+    expect(message).toContain('Owned by you: 2');
+    expect(message).toContain('Breedable right now: 2');
+  });
+
+  it('formats deterministic specimen details and inheritance summaries', () => {
+    const profile: SpecimenProfile = {
+      id: 'spec-quartz',
+      name: 'Quartz',
+      ownerId: 'user-a',
+      breedable: true,
+      ownershipState: 'claimed',
+      breedState: 'ready',
+      parentAId: 'spec-a',
+      parentBId: 'spec-b',
+      claw: {
+        id: 'spec-quartz',
+        name: 'Quartz',
+        archetype: 'The Systems Gardener',
+        generation: 1,
+        identity: {
+          creature: 'Signal Raptor',
+          role: 'Systems Gardener',
+          directive: 'Grow structured systems.',
+          vibe: 'Calm',
+          emoji: '🌱',
+        },
+        soul: { traits: [{ id: 'trait-analysis', label: 'Analysis', description: '', weight: 1, color: '#fff', visualSymbol: { shapeModifier: 'geometric', description: '' } }] },
+        skills: { badges: [{ id: 'skill-review', label: 'Review', icon: '🔍', dominance: 1, color: '#fff' }] },
+        tools: { loadout: [{ id: 'tool-search-probe', label: 'Search Probe', icon: '🔎', description: '', potency: 1, color: '#fff' }] },
+        visual: { primaryColor: '#fff', secondaryColor: '#000', shapeModifiers: ['geometric'], pattern: 'solid', glowIntensity: 0.5 },
+        intro: 'Quartz intro',
+        lineage: {
+          parentA: 'spec-a',
+          parentB: 'spec-b',
+          inheritanceMap: [
+            { type: 'soul', traitId: 'trait-analysis', label: 'Analysis', origin: 'parentA' },
+          ],
+        },
+      },
+    };
+
+    const details = formatSpecimenSummary(profile);
+    expect(details).toContain('**Quartz**');
+    expect(details).toContain('Archetype: The Systems Gardener');
+    expect(details).toContain('Soul traits: Analysis');
+
+    const inheritance = formatInheritanceReply(profile, {
+      resolveSpecimenByName: () => null,
+      resolveSpecimenById: (id) => ({ id, name: id === 'spec-a' ? 'khl7q5' : 'dgxspark-claw', ownerId: null, breedable: true }),
+      listBreedableSpecimens: () => [],
+      runBreed: async () => ({ runId: '1', childId: '2', childName: 'Quartz', lineageSummary: 'x' }),
+    });
+    expect(inheritance).toContain('Parent A: khl7q5');
+    expect(inheritance).toContain('Analysis (soul) ← parentA');
   });
 });

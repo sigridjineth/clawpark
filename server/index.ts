@@ -24,6 +24,7 @@ import { createSpecimenStore } from './specimenStore.ts';
 import { registerV1Routes } from './v1Routes.ts';
 import { startDiscordBot } from './discord-bot.ts';
 import { breed } from '../src/engine/breed.ts';
+import type { ClawBundle } from '../src/types/marketplace.ts';
 
 function isSecureCookie(config: MarketplaceServerConfig) {
   return new URL(config.publicOrigin).protocol === 'https:';
@@ -654,17 +655,63 @@ if (import.meta.url === `file://${process.argv[1]}`) {
               const all = sStore.listSpecimens();
               const match = all.find((s: { name: string }) => s.name.toLowerCase() === name.toLowerCase());
               if (!match) return null;
-              return { id: match.id, name: match.name, ownerId: match.discordUserId, breedable: match.ownershipState === 'claimed' && match.breedState === 'ready' };
+              return {
+                id: match.id,
+                name: match.name,
+                ownerId: match.discordUserId,
+                breedable: match.ownershipState === 'claimed' && match.breedState === 'ready',
+                ownershipState: match.ownershipState,
+                breedState: match.breedState,
+              };
             },
             resolveSpecimenById: (id: string) => {
               const s = sStore.getSpecimen(id);
               if (!s) return null;
-              return { id: s.id, name: s.name, ownerId: s.discordUserId, breedable: s.ownershipState === 'claimed' && s.breedState === 'ready' };
+              return {
+                id: s.id,
+                name: s.name,
+                ownerId: s.discordUserId,
+                breedable: s.ownershipState === 'claimed' && s.breedState === 'ready',
+                ownershipState: s.ownershipState,
+                breedState: s.breedState,
+              };
             },
             listBreedableSpecimens: () => {
               return sStore.listSpecimens()
                 .filter((s: { ownershipState: string; breedState: string }) => s.ownershipState === 'claimed' && s.breedState === 'ready')
-                .map((s: { id: string; name: string; discordUserId: string | null }) => ({ id: s.id, name: s.name, ownerId: s.discordUserId, breedable: true }));
+                .map((s: { id: string; name: string; discordUserId: string | null; ownershipState: string; breedState: string }) => ({
+                  id: s.id,
+                  name: s.name,
+                  ownerId: s.discordUserId,
+                  breedable: true,
+                  ownershipState: s.ownershipState,
+                  breedState: s.breedState,
+                }));
+            },
+            listAllSpecimens: () => {
+              return sStore.listSpecimens().map((s: { id: string; name: string; discordUserId: string | null; ownershipState: string; breedState: string }) => ({
+                id: s.id,
+                name: s.name,
+                ownerId: s.discordUserId,
+                breedable: s.ownershipState === 'claimed' && s.breedState === 'ready',
+                ownershipState: s.ownershipState,
+                breedState: s.breedState,
+              }));
+            },
+            getSpecimenProfile: (id: string) => {
+              const specimen = sStore.getSpecimen(id);
+              if (!specimen) return null;
+              return {
+                id: specimen.id,
+                name: specimen.name,
+                ownerId: specimen.discordUserId,
+                breedable: specimen.ownershipState === 'claimed' && specimen.breedState === 'ready',
+                ownershipState: specimen.ownershipState,
+                breedState: specimen.breedState,
+                parentAId: specimen.parentAId,
+                parentBId: specimen.parentBId,
+                claw: specimen.claw,
+              };
             },
             runBreed: async (parentAId: string, parentBId: string, prompt?: string) => {
               const parentA = sStore.getSpecimen(parentAId);
@@ -680,6 +727,29 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 lineageSummary: `${parentA.name} + ${parentB.name} → ${result.child.name} (${result.child.archetype})`,
               };
             },
+          },
+          exportSpecimenBundle: async (specimenId: string) => {
+            const specimen = sStore.getSpecimen(specimenId);
+            if (!specimen) return null;
+            const bundle: ClawBundle = {
+              kind: 'claw',
+              manifest: {
+                kind: 'claw',
+                bundleVersion: 1,
+                source: 'openclaw-workspace-zip',
+                includedFiles: ['IDENTITY.md', 'SOUL.md'],
+                ignoredFiles: [],
+                warnings: [],
+                generatedAt: new Date().toISOString(),
+                toolsVisibility: 'full',
+                coverStyle: 'avatar',
+              },
+              claw: specimen.claw,
+            };
+            return {
+              filename: `${specimen.name || specimen.id}.bundle.json`,
+              buffer: Buffer.from(JSON.stringify(bundle, null, 2), 'utf8'),
+            };
           },
         });
         console.log('Discord bot started successfully.');

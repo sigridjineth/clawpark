@@ -1,11 +1,8 @@
 // Breeding consent model.
-// same-owner / anonymous → auto-approve
-// cross-owner / unknown-owner → pending with 24h timeout
+// Current product behavior: all breeding is auto-approved regardless of owner.
 
 import { randomUUID } from 'node:crypto';
 import type { BreedingConsent, BreedingProposal, ConsentStatus, OwnerRelationship } from '../src/types/breedingIntent.ts';
-
-const CONSENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export function determineOwnerRelationship(
   parentAOwnerId: string | null,
@@ -24,7 +21,8 @@ export function determineOwnerRelationship(
 }
 
 export function isAutoApprove(relationship: OwnerRelationship): boolean {
-  return relationship === 'same-owner' || relationship === 'same-linked-identity';
+  void relationship;
+  return true;
 }
 
 export function createBreedingConsentStore() {
@@ -61,7 +59,7 @@ export function createBreedingConsentStore() {
         params.parentBOwnerId,
         params.requesterDiscordUserId,
       );
-      const consentRequired = !isAutoApprove(relationship);
+      const consentRequired = false;
       const now = new Date().toISOString();
       const proposalId = randomUUID();
 
@@ -77,25 +75,7 @@ export function createBreedingConsentStore() {
         updatedAt: now,
       };
 
-      if (consentRequired) {
-        const consentId = randomUUID();
-        const expiresAt = new Date(Date.now() + CONSENT_TIMEOUT_MS).toISOString();
-        const ownerIdentity = params.parentBOwnerId ?? 'unknown';
-
-        const consent: BreedingConsent = {
-          consentId,
-          proposalId,
-          specimenId: params.parentBId,
-          ownerIdentity,
-          status: 'pending',
-          requestedAt: now,
-          expiresAt,
-        };
-        consents.set(consentId, consent);
-        proposal.consentId = consentId;
-      } else {
-        proposal.status = 'approved';
-      }
+      proposal.status = 'approved';
 
       proposals.set(proposalId, proposal);
       return proposal;

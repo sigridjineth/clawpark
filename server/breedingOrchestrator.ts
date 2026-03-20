@@ -10,11 +10,7 @@ import type {
   RequesterIdentity,
   SourceSurface,
 } from '../src/types/breedingIntent.ts';
-import {
-  createBreedingConsentStore,
-  determineOwnerRelationship,
-  isAutoApprove,
-} from './breedingConsent.ts';
+import { createBreedingConsentStore } from './breedingConsent.ts';
 
 // Shared in-memory stores
 const intentStore = new Map<string, BreedingIntent>();
@@ -79,8 +75,6 @@ export async function suggestCandidates(
   if (!intent) throw new Error(`Intent not found: ${intentId}`);
 
   const breedable = deps.listBreedableSpecimens();
-  const requesterOwnerId = intent.requesterIdentity.discordUserId;
-
   if (intent.targetSpecimenIds.length === 0) {
     // No target — suggest top 3 breedable specimens
     intent.suggestedCandidates = breedable.slice(0, 3).map(
@@ -88,8 +82,8 @@ export async function suggestCandidates(
         specimenId: s.id,
         name: s.name,
         compatibilitySummary: 'Available for breeding',
-        ownerRelationship: s.ownerId ? 'same-linked-identity' : 'unknown-owner',
-        eligibleForAutoApprove: !s.ownerId,
+        ownerRelationship: 'same-owner',
+        eligibleForAutoApprove: true,
       }),
     );
   } else if (intent.targetSpecimenIds.length === 1) {
@@ -104,16 +98,13 @@ export async function suggestCandidates(
     intent.suggestedCandidates = breedable
       .filter((s) => s.id !== parentA.id)
       .slice(0, 3)
-      .map((s): CandidateSuggestion => {
-        const rel = determineOwnerRelationship(parentA.ownerId, s.ownerId, requesterOwnerId);
-        return {
-          specimenId: s.id,
-          name: s.name,
-          compatibilitySummary: isAutoApprove(rel) ? 'Auto-approve eligible' : 'Consent required',
-          ownerRelationship: rel,
-          eligibleForAutoApprove: isAutoApprove(rel),
-        };
-      });
+      .map((s): CandidateSuggestion => ({
+        specimenId: s.id,
+        name: s.name,
+        compatibilitySummary: 'Available for breeding',
+        ownerRelationship: 'same-owner',
+        eligibleForAutoApprove: true,
+      }));
   } else {
     // Two targets — show compatibility between them
     const parentA = deps.resolveSpecimenById(intent.targetSpecimenIds[0]);
@@ -123,14 +114,13 @@ export async function suggestCandidates(
       intent.status = 'cancelled';
       return touchIntent(intent);
     }
-    const rel = determineOwnerRelationship(parentA.ownerId, parentB.ownerId, requesterOwnerId);
     intent.suggestedCandidates = [
       {
         specimenId: parentB.id,
         name: parentB.name,
-        compatibilitySummary: isAutoApprove(rel) ? 'Auto-approve eligible' : 'Consent required',
-        ownerRelationship: rel,
-        eligibleForAutoApprove: isAutoApprove(rel),
+        compatibilitySummary: 'Available for breeding',
+        ownerRelationship: 'same-owner',
+        eligibleForAutoApprove: true,
       },
     ];
   }
@@ -190,15 +180,9 @@ export async function checkEligibilityAndConsent(
   });
   intent.proposalId = proposal.proposalId;
 
-  if (proposal.status === 'approved') {
-    intent.status = 'eligibility_checked';
-    touchIntent(intent);
-    return { intent, ready: true };
-  }
-
-  intent.status = 'consent_pending';
+  intent.status = 'eligibility_checked';
   touchIntent(intent);
-  return { intent, ready: false, blocked: 'Cross-owner breeding — consent required (24h timeout)' };
+  return { intent, ready: true };
 }
 
 // --- Stages 5–6: Execute breed ---
