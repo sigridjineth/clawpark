@@ -51,6 +51,14 @@ npm run server:start
 
 The Node server serves both the built `dist/` frontend and the API endpoints from the same host.
 
+### Current validation status
+
+- `npm run lint` passes
+- `npm run typecheck` passes
+- `npm run test` passes
+- The frontend **upload/import** and **breed** flows are covered by contract-style tests, but they have **not yet been manually browser-tested end-to-end** with real user interaction and real ZIP uploads
+- GitHub issue tracking that gap: **#20** `Validate frontend upload and breeding flows end-to-end (manual + automated)`
+
 ---
 
 ## What is ClawPark?

@@ -4,6 +4,7 @@ import type {
   BreedingRunRecord,
   BreedingRunResult,
   EligibilityResult,
+  ImportBatchResult,
   ImportRecord,
   ImportPreview,
   LineageTree,
@@ -223,6 +224,25 @@ export async function importOpenClaw(
     specimen: normalizeSpecimen(payload.specimen),
     importRecord: normalizeImportRecord(payload.importRecord),
   };
+}
+
+export async function importOpenClaws(
+  files: File[],
+  discordUserId?: string,
+): Promise<ImportBatchResult> {
+  const settled = await Promise.allSettled(files.map((file) => importOpenClaw(file, discordUserId)));
+  const previews: ImportPreview[] = [];
+  const errors: string[] = [];
+
+  settled.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      previews.push(result.value);
+      return;
+    }
+    errors.push(`${files[index]?.name ?? `ZIP ${index + 1}`}: ${result.reason instanceof Error ? result.reason.message : 'Import failed'}`);
+  });
+
+  return { previews, errors };
 }
 
 export async function claimSpecimen(

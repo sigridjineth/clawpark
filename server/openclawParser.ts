@@ -155,6 +155,15 @@ function extractEmoji(value: string) {
   return match?.[0] ?? null;
 }
 
+function sanitizeIdentityValue(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/^['"]|['"]$/g, '') ?? '';
+  if (!normalized) return null;
+  if (!/[A-Za-z0-9가-힣]/.test(normalized)) return null;
+  if (/^\*+$/.test(normalized)) return null;
+  if (/pick something you like|fill this in|who am i|todo|tbd/i.test(normalized)) return null;
+  return normalized;
+}
+
 function buildVisual(name: string, soulTraits: SoulTrait[], skills: SkillBadge[]): ClawVisual {
   const hash = shortHash(`${name}:${soulTraits.map((trait) => trait.id).join(',')}:${skills.map((skill) => skill.id).join(',')}`);
   const primaryColor = skills[0]?.color ?? soulTraits[0]?.color ?? '#f2d176';
@@ -202,38 +211,39 @@ function fallbackTools(text: string, skills: SkillBadge[]) {
   return ranked.length > 0 ? ranked : deriveToolLoadout(skills);
 }
 
-function parseIdentity(identityMarkdown: string, soulMarkdown: string): { name: string; identity: ClawIdentity; archetype: string; intro: string } {
+function parseIdentity(identityMarkdown: string, soulMarkdown: string, fallbackNameHint: string): { name: string; identity: ClawIdentity; archetype: string; intro: string } {
   const frontmatter = parseFrontmatter(identityMarkdown);
   const stripped = stripMarkdown(identityMarkdown);
   const name =
-    frontmatter.name ||
-    findField(identityMarkdown, ['name']) ||
-    firstHeading(identityMarkdown) ||
+    sanitizeIdentityValue(frontmatter.name) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['name'])) ||
+    sanitizeIdentityValue(firstHeading(identityMarkdown)) ||
+    sanitizeIdentityValue(fallbackNameHint) ||
     basename(frontmatter.slug || 'Specimen').replace(/\.md$/i, '') ||
     'Specimen';
   const role =
-    frontmatter.role ||
-    frontmatter.title ||
-    findField(identityMarkdown, ['role', 'title']) ||
+    sanitizeIdentityValue(frontmatter.role) ||
+    sanitizeIdentityValue(frontmatter.title) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['role', 'title'])) ||
     'Field Specimen';
   const directive =
-    frontmatter.directive ||
-    findField(identityMarkdown, ['directive', 'mission', 'purpose']) ||
-    firstParagraph(identityMarkdown) ||
+    sanitizeIdentityValue(frontmatter.directive) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['directive', 'mission', 'purpose'])) ||
+    sanitizeIdentityValue(firstParagraph(identityMarkdown)) ||
     'Hold the line and keep the hatchery stable.';
   const vibe =
-    frontmatter.vibe ||
-    frontmatter.tone ||
-    findField(identityMarkdown, ['vibe', 'tone', 'style']) ||
+    sanitizeIdentityValue(frontmatter.vibe) ||
+    sanitizeIdentityValue(frontmatter.tone) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['vibe', 'tone', 'style'])) ||
     'Measured · Adaptive';
   const creature =
-    frontmatter.creature ||
-    frontmatter.species ||
-    findField(identityMarkdown, ['creature', 'species', 'chassis']) ||
+    sanitizeIdentityValue(frontmatter.creature) ||
+    sanitizeIdentityValue(frontmatter.species) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['creature', 'species', 'chassis'])) ||
     'OpenClaw Hatchling';
   const emoji =
-    frontmatter.emoji ||
-    findField(identityMarkdown, ['emoji']) ||
+    sanitizeIdentityValue(frontmatter.emoji) ||
+    sanitizeIdentityValue(findField(identityMarkdown, ['emoji'])) ||
     extractEmoji(identityMarkdown) ||
     extractEmoji(soulMarkdown) ||
     '🧬';
@@ -363,7 +373,8 @@ export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<Parsed
   if (skillTexts.length === 0) warnings.push('No skills/*/SKILL.md files found; skill badges inferred from SOUL and IDENTITY.');
   if (invalid.length > 0) warnings.push(`Ignored ${invalid.length} non-public files from the upload.`);
 
-  const identity = parseIdentity(identityMarkdown, soulMarkdown);
+  const fallbackNameHint = basename(zipPath).replace(/\.zip$/i, '');
+  const identity = parseIdentity(identityMarkdown, soulMarkdown, fallbackNameHint);
   const soulTraits = fallbackSoulTraits(`${identityMarkdown}\n${soulMarkdown}`);
   const skills = fallbackSkillBadges(
     `${identityMarkdown}\n${soulMarkdown}\n${skillTexts.map((entry) => `${entry.path}\n${entry.text}`).join('\n')}`,

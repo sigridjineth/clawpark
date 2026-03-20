@@ -168,6 +168,13 @@ describe('marketplace API', () => {
     expect(spec.info.title).toContain('ClawPark');
     expect(spec.paths['/api/docs']).toBeTruthy();
     expect(spec.paths['/api/marketplace/listings/{slug}/install']).toBeTruthy();
+    expect(spec.paths['/api/v1/home']).toBeTruthy();
+    expect(spec.paths['/api/v1/breeding/runs']).toBeTruthy();
+    expect(spec.paths['/api/v1/breeding/proposals']).toBeTruthy();
+    expect(spec.paths['/api/my/claws']).toBeTruthy();
+    expect(spec.paths['/api/marketplace/mock-listings']).toBeTruthy();
+    expect(spec.paths['/api/breeding/runs']).toBeTruthy();
+    expect(spec.paths['/api/claws/{clawId}/provenance']).toBeTruthy();
 
     const docsResponse = await fetch(`${baseUrl}/api/docs`);
     expect(docsResponse.status).toBe(200);

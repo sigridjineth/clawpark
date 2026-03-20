@@ -21,7 +21,7 @@ export interface HomePayload {
   onboarding_state: 'none' | 'discord_linked';
 }
 
-export function buildHomePayload(store: SpecimenStore, discordUserId?: string): HomePayload {
+export function buildHomePayload(store: SpecimenStore, discordUserId?: string, discordHandle?: string): HomePayload {
   const counts = store.countByState();
   const actions: SuggestedAction[] = [];
 
@@ -98,7 +98,7 @@ export function buildHomePayload(store: SpecimenStore, discordUserId?: string): 
     unsaved_children: unsavedCount,
     what_to_do_next: whatToDoNext,
     suggested_actions: actions,
-    connected_identity: discordUserId ? { discordUserId } : null,
+    connected_identity: discordUserId ? { discordUserId, discordHandle } : null,
     onboarding_state: (discordUserId ? 'discord_linked' : 'none') as 'none' | 'discord_linked',
   };
 }

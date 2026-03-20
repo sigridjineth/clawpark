@@ -4,9 +4,9 @@
 
 import { Client, Events, GatewayIntentBits, type Message } from 'discord.js';
 import type { OrchestratorDeps, RequesterIdentity } from '../src/types/breedingIntent.ts';
-import { writeFile, mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { access, writeFile, mkdir, rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { parseDiscordMessage, stripBotPrefix } from './discordIntent.ts';
 import { createOpenRouterClient } from './openrouter.ts';
@@ -25,6 +25,115 @@ export interface DiscordBotDeps {
   token: string;
   orchestratorDeps: OrchestratorDeps;
   importSpecimen?: (zipPath: string, discordUserId: string) => Promise<{ specimenName: string; specimenId: string }>;
+  allowLocalZipPathImport?: boolean;
+}
+
+interface MentionedUser {
+  id: string;
+  displayName: string;
+}
+
+type CandidateReplyMode = 'available-specimens' | 'partner-options';
+
+const PERSUADE_MEMORY_MS = 15 * 60 * 1000;
+const persuadeMemory = new Map<string, { targets: MentionedUser[]; updatedAt: number }>();
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function containsPlainBotReference(message: string, names: string[]) {
+  const normalizedNames = names.map((name) => name.trim()).filter(Boolean);
+  return normalizedNames.some((name) => {
+    const pattern = new RegExp(`(^|\\s)@?${escapeRegExp(name)}(?=\\s|$|[.!?,:;])`, 'i');
+    return pattern.test(message);
+  });
+}
+
+export function isLikelyPersuadeFollowUp(message: string) {
+  return /this guy|do again|again|keep continuing|continue|check above|above zip|same guy|same user|retry|한번 더|다시/i.test(message);
+}
+
+export function isSpecimenInventoryQuestion(message: string) {
+  return /what claws|what specimens|name all|list all|show all|available claws|available specimens|what do you have|how many claws|which claws|specimen details/i.test(message.toLowerCase());
+}
+
+export function extractLocalZipPath(message: string) {
+  const match = message.match(/((?:\/|~\/|\.\/)[^\s"'`]+\.zip)\b/i);
+  return match?.[1] ?? null;
+}
+
+function normalizeLocalZipPath(zipPath: string, cwd = process.cwd()) {
+  if (zipPath.startsWith('~/')) {
+    return resolve(homedir(), zipPath.slice(2));
+  }
+  return isAbsolute(zipPath) ? resolve(zipPath) : resolve(cwd, zipPath);
+}
+
+export function isAllowedLocalZipPath(zipPath: string, cwd = process.cwd()) {
+  const normalized = normalizeLocalZipPath(zipPath, cwd);
+  const allowedRoots = [resolve(tmpdir()), resolve('/tmp'), resolve(cwd)];
+  return normalized.toLowerCase().endsWith('.zip')
+    && allowedRoots.some((root) => normalized === root || normalized.startsWith(`${root}${sep}`));
+}
+
+function rememberPersuadeTargets(authorId: string, targets: MentionedUser[]) {
+  if (targets.length === 0) return;
+  persuadeMemory.set(authorId, { targets, updatedAt: Date.now() });
+}
+
+function getRememberedPersuadeTargets(authorId: string) {
+  const memory = persuadeMemory.get(authorId);
+  if (!memory) return [];
+  if (Date.now() - memory.updatedAt > PERSUADE_MEMORY_MS) {
+    persuadeMemory.delete(authorId);
+    return [];
+  }
+  return memory.targets;
+}
+
+export function resolvePersuadeTargets(currentTargets: MentionedUser[], rememberedTargets: MentionedUser[], message: string) {
+  if (currentTargets.length > 0) return currentTargets;
+  if (isLikelyPersuadeFollowUp(message)) return rememberedTargets;
+  return [];
+}
+
+export function displayCandidateName(candidate: { name?: string; specimenId: string }) {
+  const name = candidate.name?.trim();
+  return name && name.length > 0 ? name : candidate.specimenId;
+}
+
+export function formatCandidateSuggestionsReply(
+  candidates: Array<{ specimenId: string; name?: string; compatibilitySummary: string; eligibleForAutoApprove: boolean }>,
+  mode: CandidateReplyMode,
+  targetName?: string,
+) {
+  if (candidates.length === 0) {
+    return 'I do not currently see any breedable claws in the park. Upload or claim a specimen first, then try again.';
+  }
+
+  const lines = candidates.map((candidate, index) => {
+    const label = displayCandidateName(candidate);
+    return `${index + 1}. **${label}** — ${candidate.compatibilitySummary} (${candidate.eligibleForAutoApprove ? 'auto-approve eligible' : 'mutual approval required'})`;
+  });
+
+  if (mode === 'available-specimens') {
+    return [
+      'Here are the claws currently available to breed:',
+      '',
+      ...lines,
+      '',
+      'Reply with **two specimen names** to start breeding, for example: `breed Ridgeback with Orchid Glass`.',
+    ].join('\n');
+  }
+
+  return [
+    `Here are the available breeding partners${targetName ? ` for **${targetName}**` : ''}:`,
+    '',
+    ...lines,
+    '',
+    'You can say **"proceed"** to use the first option, or reply with a specific specimen name.',
+  ].join('\n');
 }
 
 // --- LLM response generator ---
@@ -103,7 +212,7 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       rawMentionIds.push(mention.id);
     }
   }
-  const mentionedUsersList: Array<{ id: string; displayName: string }> = [];
+  const mentionedUsersList: MentionedUser[] = [];
   for (const id of rawMentionIds) {
     try {
       const user = await msg.client.users.fetch(id);
@@ -114,12 +223,28 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
   const mentionContext = mentionedUsersList.length > 0
     ? `\nMentioned users: ${mentionedUsersList.map((u) => `${u.displayName} (mention tag: <@${u.id}>)`).join(', ')}. IMPORTANT: When referring to these users in your response, use their Discord mention tag (e.g. <@${mentionedUsersList[0]?.id}>) so they get notified.`
     : '';
+  if (isSpecimenInventoryQuestion(userMessage)) {
+    await msg.reply(formatCandidateSuggestionsReply(
+      breedable.map((specimen) => ({
+        specimenId: specimen.id,
+        name: specimen.name,
+        compatibilitySummary: 'Available for breeding',
+        eligibleForAutoApprove: specimen.ownerId === requesterIdentity.discordUserId || specimen.ownerId === null,
+      })),
+      'available-specimens',
+    ));
+    return;
+  }
+
+  const rememberedPersuadeTargets = getRememberedPersuadeTargets(discordUserId);
+  const effectivePersuadeTargets = resolvePersuadeTargets(mentionedUsersList, rememberedPersuadeTargets, userMessage);
 
   // --- persuade: invite another user to upload their ZIP ---
-  if (parsed.action === 'persuade') {
-    if (mentionedUsersList.length > 0) {
-      const targetMentions = mentionedUsersList.map((u) => `<@${u.id}>`).join(', ');
-      const targetNames = mentionedUsersList.map((u) => u.displayName).join(', ');
+  if (parsed.action === 'persuade' || effectivePersuadeTargets.length > 0 && isLikelyPersuadeFollowUp(userMessage)) {
+    if (effectivePersuadeTargets.length > 0) {
+      rememberPersuadeTargets(discordUserId, effectivePersuadeTargets);
+      const targetMentions = effectivePersuadeTargets.map((u) => `<@${u.id}>`).join(', ');
+      const targetNames = effectivePersuadeTargets.map((u) => u.displayName).join(', ');
       console.log(`[ClawPark Bot] Persuade intent for: ${targetNames}`);
       const response = await generateResponse(
         `User "${msg.author.displayName}" wants me to persuade ${targetNames} (Discord mentions: ${targetMentions}) to upload their OpenClaw agent ZIP to ClawPark for breeding.\n\nContext: ${specimenContext}\n\nWrite a fun, persuasive message DIRECTLY addressing the mentioned users using their mention tags (${targetMentions}). Make it exciting — talk about how their agent could breed with existing specimens, create unique children, track lineage. Be enthusiastic but not pushy. Tell them they can just drag-and-drop a ZIP file here and mention <@${botId}> to get started. Use <@${botId}> when referring to the bot, not "@ClawPark". Keep it under 150 words.`,
@@ -238,13 +363,14 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       await msg.reply(response);
       return;
     }
-    const candidateInfo = updated.suggestedCandidates
-      .map((c, i) => `${i + 1}. ${c.name} — ${c.compatibilitySummary} (auto-approve: ${c.eligibleForAutoApprove})`)
-      .join('\n');
-    const response = await generateResponse(
-      `User asked to find breeding partners. Here are the candidates:\n${candidateInfo}\n\nPresent these as breeding options. Tell the user they can say "proceed" to breed with the first option, or name a specific specimen.`,
-    );
-    await msg.reply(response);
+    const targetName = updated.targetSpecimenIds.length === 1
+      ? orchestratorDeps.resolveSpecimenById(updated.targetSpecimenIds[0])?.name
+      : undefined;
+    await msg.reply(formatCandidateSuggestionsReply(
+      updated.suggestedCandidates,
+      updated.targetSpecimenIds.length === 1 ? 'partner-options' : 'available-specimens',
+      targetName,
+    ));
     return;
   }
 
@@ -259,14 +385,13 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
         await msg.reply(response);
         return;
       }
-      const candidateInfo = updated.suggestedCandidates
-        .map((c, i) => `${i + 1}. ${c.name} — ${c.compatibilitySummary}`)
-        .join('\n');
       const foundNames = parsed.mentionedNames.filter((n) => orchestratorDeps.resolveSpecimenByName(n));
-      const response = await generateResponse(
-        `User wants to breed but only found ${foundNames.length} of ${parsed.mentionedNames.length} specimens (found: ${foundNames.join(', ') || 'none'}). Here are available candidates:\n${candidateInfo}\n\nSuggest they pick a partner or say "proceed" for #1.`,
-      );
-      await msg.reply(response);
+      const targetName = foundNames[0];
+      await msg.reply(formatCandidateSuggestionsReply(
+        updated.suggestedCandidates,
+        foundNames.length === 1 ? 'partner-options' : 'available-specimens',
+        targetName,
+      ));
       return;
     }
 
@@ -330,7 +455,12 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
       role.name.toLowerCase().includes('clawpark') || role.members.has(client.user?.id ?? ''),
     );
     const hasPrefix = msg.content.startsWith('!breed');
-    if (!isMentioned && !hasRoleMention && !hasPrefix) return;
+    const plainBotReference = containsPlainBotReference(msg.content, [
+      client.user?.username ?? '',
+      client.user?.displayName ?? '',
+      msg.guild?.members.me?.displayName ?? '',
+    ]);
+    if (!isMentioned && !hasRoleMention && !hasPrefix && !plainBotReference) return;
 
     try {
       await msg.channel.sendTyping();
@@ -356,6 +486,30 @@ export function startDiscordBot(deps: DiscordBotDeps): Client {
           const errMsg = importErr instanceof Error ? importErr.message : 'Unknown error';
           const llmResponse = await generateResponse(
             `User tried to upload a ZIP file "${zipAttachment.name}" but import failed: ${errMsg}. Explain what went wrong and remind them the ZIP must contain IDENTITY.md and SOUL.md files.`,
+          );
+          await msg.reply(llmResponse);
+          return;
+        }
+      }
+
+      const localZipPath = extractLocalZipPath(msg.content);
+      if (localZipPath && deps.importSpecimen && deps.allowLocalZipPathImport) {
+        try {
+          if (!isAllowedLocalZipPath(localZipPath)) {
+            throw new Error('Local ZIP path is outside the allowed dev import locations.');
+          }
+          const normalizedZipPath = normalizeLocalZipPath(localZipPath);
+          await access(normalizedZipPath);
+          const result = await deps.importSpecimen(normalizedZipPath, msg.author.id);
+          const llmResponse = await generateResponse(
+            `User "${msg.author.tag}" shared a local OpenClaw ZIP path "${normalizedZipPath}". It was successfully imported! Specimen name: "${result.specimenName}", ID: ${result.specimenId}. Celebrate the import and suggest they can now inspect or breed it.`,
+          );
+          await msg.reply(llmResponse);
+          return;
+        } catch (importErr) {
+          const errMsg = importErr instanceof Error ? importErr.message : 'Unknown error';
+          const llmResponse = await generateResponse(
+            `User tried to hand off a local ZIP path "${localZipPath}" but import failed: ${errMsg}. Explain what went wrong. Mention that local-path imports are only supported in local development and the file must be a readable .zip under the allowed dev paths.`,
           );
           await msg.reply(llmResponse);
           return;

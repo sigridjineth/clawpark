@@ -4,14 +4,15 @@ import { AlertTriangle, CheckCircle, FileUp, Upload, X } from 'lucide-react';
 import type { ImportPreview } from '../../types/specimen';
 
 interface ImportProps {
-  onImport: (file: File, discordUserId?: string) => Promise<void>;
+  onImport: (files: File[], discordUserId?: string) => Promise<void>;
   onClaim: (id: string, discordUserId?: string) => Promise<void>;
-  importPreview: ImportPreview | null;
+  importPreviews: ImportPreview[];
   onClearPreview: () => void;
+  onDismissPreview: (specimenId: string) => void;
   discordUserId?: string;
 }
 
-export function Import({ onImport, onClaim, importPreview, onClearPreview, discordUserId }: ImportProps) {
+export function Import({ onImport, onClaim, importPreviews, onClearPreview, onDismissPreview, discordUserId }: ImportProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -30,7 +31,7 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
       setError(null);
       setBusy(true);
       try {
-        await onImport(target[0], discordUserId);
+        await onImport(target, discordUserId);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Import failed.');
       } finally {
@@ -56,21 +57,21 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleClaim = async () => {
-    if (!importPreview) return;
+  const handleClaim = async (id: string) => {
+    const preview = importPreviews.find((entry) => entry.specimen.id === id);
+    if (!preview) return;
     setBusy(true);
     try {
-      await onClaim(importPreview.specimen.id, discordUserId);
-      setPendingFiles([]);
+      await onClaim(preview.specimen.id, discordUserId);
+      if (importPreviews.length <= 1) {
+        setPendingFiles([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Claim failed.');
     } finally {
       setBusy(false);
     }
   };
-
-  const claw = importPreview?.specimen.claw;
-  const record = importPreview?.importRecord;
 
   return (
     <section className="space-y-4">
@@ -147,141 +148,160 @@ export function Import({ onImport, onClaim, importPreview, onClearPreview, disco
 
       {/* Import preview */}
       <AnimatePresence>
-        {importPreview && claw && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="jp-card space-y-4 p-5"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="jp-label">Import preview</div>
-                <h3 className="mt-1 font-display text-[28px] leading-6 text-white">{claw.name}</h3>
-                <div className="mt-1 font-mono text-[10px] text-[var(--openclaw-muted)]">
-                  {claw.archetype}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onClearPreview}
-                aria-label="Close import preview"
-                className="text-[var(--openclaw-muted)] transition-colors hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        {importPreviews.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="jp-label">Import previews ({importPreviews.length})</div>
+              {importPreviews.length > 1 && (
+                <button type="button" onClick={onClearPreview} className="jp-btn-secondary text-xs">
+                  Clear all
+                </button>
+              )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {claw.identity && (
-                <div
-                  className="rounded-[8px] border border-white/10 p-3"
-                  style={{ background: 'rgba(0,0,0,0.2)' }}
-                >
-                  <div className="jp-label">Identity</div>
-                  <p className="mt-2 font-mono text-sm text-[var(--openclaw-text)]">
-                    {claw.identity.emoji} {claw.identity.creature} — {claw.identity.vibe}
-                  </p>
-                  <p className="mt-1 font-mono text-xs text-[var(--openclaw-muted)]">
-                    {claw.identity.directive}
-                  </p>
-                </div>
-              )}
+            <div className="grid gap-4 xl:grid-cols-2">
+              {importPreviews.map((preview) => {
+                const claw = preview.specimen.claw;
+                const record = preview.importRecord;
 
-              <div
-                className="rounded-[8px] border border-white/10 p-3"
-                style={{ background: 'rgba(0,0,0,0.2)' }}
-              >
-                <div className="jp-label">Soul traits</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {claw.soul.traits.map((trait) => (
-                    <span
-                      key={trait.id}
-                      className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(171,114,255,0.65)] bg-[rgba(171,114,255,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
-                    >
-                      {trait.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                className="rounded-[8px] border border-white/10 p-3"
-                style={{ background: 'rgba(0,0,0,0.2)' }}
-              >
-                <div className="jp-label">Skills</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {claw.skills.badges.map((skill) => (
-                    <span
-                      key={skill.id}
-                      className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(61,151,235,0.65)] bg-[rgba(61,151,235,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
-                    >
-                      {skill.icon} {skill.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {claw.tools && (
-                <div
-                  className="rounded-[8px] border border-white/10 p-3"
-                  style={{ background: 'rgba(0,0,0,0.2)' }}
-                >
-                  <div className="jp-label">Tools</div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {claw.tools.loadout.map((tool) => (
-                      <span
-                        key={tool.id}
-                        className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(235,194,61,0.65)] bg-[rgba(235,194,61,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                return (
+                  <motion.div
+                    key={preview.specimen.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    className="jp-card space-y-4 p-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="jp-label">Import preview</div>
+                        <h3 className="mt-1 font-display text-[28px] leading-6 text-white">{claw.name}</h3>
+                        <div className="mt-1 font-mono text-[10px] text-[var(--openclaw-muted)]">
+                          {claw.archetype}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onDismissPreview(preview.specimen.id)}
+                        aria-label={`Close import preview for ${claw.name}`}
+                        className="text-[var(--openclaw-muted)] transition-colors hover:text-white"
                       >
-                        {tool.icon} {tool.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
 
-            {/* Warnings */}
-            {record && record.warnings.length > 0 && (
-              <div
-                className="rounded-[8px] border border-white/20 p-3"
-                style={{ background: 'rgba(255,255,255,0.05)' }}
-              >
-                <div className="mb-2 jp-label">Warnings</div>
-                <ul className="space-y-1">
-                  {record.warnings.map((w, i) => (
-                    <li key={i} className="flex items-start gap-2 font-mono text-xs text-[var(--openclaw-muted)]">
-                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                      {w}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {claw.identity && (
+                        <div
+                          className="rounded-[8px] border border-white/10 p-3"
+                          style={{ background: 'rgba(0,0,0,0.2)' }}
+                        >
+                          <div className="jp-label">Identity</div>
+                          <p className="mt-2 font-mono text-sm text-[var(--openclaw-text)]">
+                            {claw.identity.emoji} {claw.identity.creature} — {claw.identity.vibe}
+                          </p>
+                          <p className="mt-1 font-mono text-xs text-[var(--openclaw-muted)]">
+                            {claw.identity.directive}
+                          </p>
+                        </div>
+                      )}
 
-            {/* Provenance */}
-            <div
-              className="rounded-[8px] border border-white/10 px-3 py-2 font-mono text-xs text-[var(--openclaw-muted)]"
-              style={{ background: 'rgba(0,0,0,0.2)' }}
-            >
-              <span className="text-[var(--openclaw-text)]">Import record: </span>
-              {record?.sourceKind ?? 'openclaw_zip'}
-              {record?.includedFiles.length ? ` · ${record.includedFiles.length} file(s)` : ''}
-            </div>
+                      <div
+                        className="rounded-[8px] border border-white/10 p-3"
+                        style={{ background: 'rgba(0,0,0,0.2)' }}
+                      >
+                        <div className="jp-label">Soul traits</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {claw.soul.traits.map((trait) => (
+                            <span
+                              key={trait.id}
+                              className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(171,114,255,0.65)] bg-[rgba(171,114,255,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                            >
+                              {trait.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
 
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => void handleClaim()}
-                className="jp-btn"
-                disabled={busy}
-              >
-                <CheckCircle className="h-4 w-4" />
-                {busy ? 'Claiming…' : 'Claim specimen'}
-              </button>
+                      <div
+                        className="rounded-[8px] border border-white/10 p-3"
+                        style={{ background: 'rgba(0,0,0,0.2)' }}
+                      >
+                        <div className="jp-label">Skills</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {claw.skills.badges.map((skill) => (
+                            <span
+                              key={skill.id}
+                              className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(61,151,235,0.65)] bg-[rgba(61,151,235,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                            >
+                              {skill.icon} {skill.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {claw.tools && (
+                        <div
+                          className="rounded-[8px] border border-white/10 p-3"
+                          style={{ background: 'rgba(0,0,0,0.2)' }}
+                        >
+                          <div className="jp-label">Tools</div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {claw.tools.loadout.map((tool) => (
+                              <span
+                                key={tool.id}
+                                className="inline-flex h-5 items-center rounded-[8px] border border-[rgba(235,194,61,0.65)] bg-[rgba(235,194,61,0.19)] px-2 font-mono text-[12px] text-[var(--openclaw-cta)]"
+                              >
+                                {tool.icon} {tool.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {record.warnings.length > 0 && (
+                      <div
+                        className="rounded-[8px] border border-white/20 p-3"
+                        style={{ background: 'rgba(255,255,255,0.05)' }}
+                      >
+                        <div className="mb-2 jp-label">Warnings</div>
+                        <ul className="space-y-1">
+                          {record.warnings.map((w, i) => (
+                            <li key={`${preview.specimen.id}-${i}`} className="flex items-start gap-2 font-mono text-xs text-[var(--openclaw-muted)]">
+                              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                              {w}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div
+                      className="rounded-[8px] border border-white/10 px-3 py-2 font-mono text-xs text-[var(--openclaw-muted)]"
+                      style={{ background: 'rgba(0,0,0,0.2)' }}
+                    >
+                      <span className="text-[var(--openclaw-text)]">Import record: </span>
+                      {record.sourceKind ?? 'openclaw_zip'}
+                      {record.includedFiles.length ? ` · ${record.includedFiles.length} file(s)` : ''}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void handleClaim(preview.specimen.id)}
+                        className="jp-btn"
+                        disabled={busy}
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        {busy ? 'Claiming…' : 'Claim specimen'}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </section>

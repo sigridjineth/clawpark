@@ -34,6 +34,7 @@ export function registerV1Routes(
   handler: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>,
   config: MarketplaceServerConfig,
   store: SpecimenStore,
+  resolveSessionIdentity?: (cookieHeader: string | undefined) => { discordUserId: string; discordHandle?: string } | null,
 ) {
   return async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
     const pathname = url.pathname.replace(/\/+$/, '') || '/';
@@ -41,8 +42,13 @@ export function registerV1Routes(
 
     // GET /api/v1/home
     if (pathname === '/api/v1/home' && method === 'GET') {
-      const userId = readSessionUserId(req.headers.cookie, config.sessionSecret);
-      const payload = buildHomePayload(store, userId ?? undefined);
+      const sessionIdentity: { discordUserId: string; discordHandle?: string } | null
+        = resolveSessionIdentity?.(req.headers.cookie)
+        ?? (() => {
+          const userId = readSessionUserId(req.headers.cookie, config.sessionSecret);
+          return userId ? { discordUserId: userId, discordHandle: undefined } : null;
+        })();
+      const payload = buildHomePayload(store, sessionIdentity?.discordUserId, sessionIdentity?.discordHandle);
       sendJson(res, 200, payload);
       return true;
     }
@@ -58,7 +64,7 @@ export function registerV1Routes(
         }
 
         const bodyFields = formData.get('discord_user_id') as string | null;
-        const discordUserId = bodyFields || readSessionUserId(req.headers.cookie, config.sessionSecret) || undefined;
+        const discordUserId = bodyFields || resolveSessionIdentity?.(req.headers.cookie)?.discordUserId || readSessionUserId(req.headers.cookie, config.sessionSecret) || undefined;
 
         const tempDir = join(tmpdir(), `clawpark-import-${randomUUID().slice(0, 8)}`);
         await mkdir(tempDir, { recursive: true });
@@ -100,6 +106,7 @@ export function registerV1Routes(
     if (claimId && method === 'POST') {
       const body = await readJson<{ discord_user_id?: string }>(req).catch(() => ({}));
       const discordUserId = (body as { discord_user_id?: string }).discord_user_id
+        || resolveSessionIdentity?.(req.headers.cookie)?.discordUserId
         || readSessionUserId(req.headers.cookie, config.sessionSecret)
         || undefined;
       const result = store.claimSpecimen(claimId, discordUserId);
@@ -169,7 +176,9 @@ export function registerV1Routes(
           seed: Date.now(),
         });
 
-        const discordUserId = readSessionUserId(req.headers.cookie, config.sessionSecret) || undefined;
+        const discordUserId = resolveSessionIdentity?.(req.headers.cookie)?.discordUserId
+          || readSessionUserId(req.headers.cookie, config.sessionSecret)
+          || undefined;
         const completed = store.completeBreedingRun(run.id, breedResult.child, discordUserId);
 
         sendJson(res, 201, {
@@ -231,7 +240,9 @@ export function registerV1Routes(
     if (pathname === '/api/v1/breeding/proposals' && method === 'POST') {
       const body = await readJson<{ parentAId: string; parentBId: string; requesterId?: string; intentId?: string }>(req);
       if (!body.parentAId || !body.parentBId) { sendError(res, 400, 'parentAId and parentBId required.'); return true; }
-      const discordUserId = readSessionUserId(req.headers.cookie, config.sessionSecret) ?? undefined;
+      const discordUserId = resolveSessionIdentity?.(req.headers.cookie)?.discordUserId
+        ?? readSessionUserId(req.headers.cookie, config.sessionSecret)
+        ?? undefined;
       const proposal = store.createBreedingProposal({
         parentAId: body.parentAId,
         parentBId: body.parentBId,
@@ -245,7 +256,8 @@ export function registerV1Routes(
     // POST /api/v1/breeding/proposals/:id/consent
     const consentProposalId = extractParam(pathname, '/api/v1/breeding/proposals/:id/consent');
     if (consentProposalId && method === 'POST') {
-      const userId = readSessionUserId(req.headers.cookie, config.sessionSecret);
+      const userId = resolveSessionIdentity?.(req.headers.cookie)?.discordUserId
+        ?? readSessionUserId(req.headers.cookie, config.sessionSecret);
       if (!userId) { sendError(res, 401, 'Discord OAuth required to give consent.'); return true; }
       const body = await readJson<{ status?: string }>(req);
       if (!body.status || !['approved', 'rejected'].includes(body.status)) {

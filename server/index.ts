@@ -100,10 +100,21 @@ export function createMarketplaceServer(configOverrides: Partial<MarketplaceServ
   const store = createMarketplaceStore(db, config.storageDir);
   const commerceStore = createMockCommerceStore();
   const specimenStore = createSpecimenStore(db);
+  const resolveSessionIdentity = (cookieHeader: string | undefined) => {
+    const sessionUserId = readSessionUserId(cookieHeader, config.sessionSecret);
+    if (!sessionUserId) return null;
+    const user = store.getUserById(sessionUserId);
+    if (!user) return { discordUserId: sessionUserId };
+    return {
+      discordUserId: user.discordUserId ?? sessionUserId,
+      discordHandle: user.discordHandle ?? undefined,
+    };
+  };
   const v1Handler = registerV1Routes(
     async () => false,
     config,
     specimenStore,
+    resolveSessionIdentity,
   );
   const secureCookies = isSecureCookie(config);
 
@@ -626,6 +637,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       try {
         startDiscordBot({
           token: config.discordBotToken,
+          allowLocalZipPathImport: config.discordAllowLocalZipPathImport,
           importSpecimen: async (zipPath: string, discordUserId: string) => {
             const { parseOpenClawWorkspaceZip } = await import('./openclawParser.ts');
             const { createHash } = await import('node:crypto');

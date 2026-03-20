@@ -19,6 +19,7 @@ export interface MarketplaceServerConfig {
   openrouterApiKey: string;
   openrouterModel: string;
   discordBotToken: string;
+  discordAllowLocalZipPathImport: boolean;
 }
 
 function required(value: string | undefined, fallback = '') {
@@ -60,6 +61,11 @@ export function loadConfig(overrides: Partial<MarketplaceServerConfig> = {}): Ma
     openrouterApiKey: overrides.openrouterApiKey ?? required(process.env.OPENROUTER_API_KEY),
     openrouterModel: overrides.openrouterModel ?? required(process.env.OPENROUTER_MODEL, 'openai/gpt-4o-mini'),
     discordBotToken: overrides.discordBotToken ?? required(process.env.DISCORD_BOT_TOKEN),
+    discordAllowLocalZipPathImport: overrides.discordAllowLocalZipPathImport
+      ?? (
+        process.env.DISCORD_ALLOW_LOCAL_ZIP_PATH_IMPORT === '1'
+        || /localhost|127\.0\.0\.1/.test(publicOrigin)
+      ),
   };
 }
 

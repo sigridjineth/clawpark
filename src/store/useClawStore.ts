@@ -13,7 +13,7 @@ interface ClawStore {
   // Server state
   specimens: Specimen[];
   homePayload: HomePayload | null;
-  importPreview: ImportPreview | null;
+  importPreviews: ImportPreview[];
 
   // Local claw cache (derived from specimens + INITIAL_CLAWS for breed flow)
   claws: Claw[];
@@ -52,7 +52,7 @@ interface ClawStore {
   // API actions
   fetchHome: () => Promise<void>;
   fetchSpecimens: () => Promise<void>;
-  importClaw: (file: File, discordUserId?: string) => Promise<void>;
+  importZipFiles: (files: File[], discordUserId?: string) => Promise<void>;
   claimClaw: (id: string, discordUserId?: string) => Promise<void>;
 
   // Legacy compat
@@ -73,7 +73,7 @@ export function createInitialStoreState() {
   return {
     specimens: [] as Specimen[],
     homePayload: null as HomePayload | null,
-    importPreview: null as ImportPreview | null,
+    importPreviews: [] as ImportPreview[],
     claws: INITIAL_CLAWS,
     selectedIds: [] as string[],
     prediction: null as BreedPrediction | null,
@@ -270,9 +270,14 @@ export const useClawStore = create<ClawStore>((set, get) => ({
     }
   },
 
-  importClaw: async (file, discordUserId) => {
-    const preview = await api.importOpenClaw(file, discordUserId);
-    set({ importPreview: preview });
+  importZipFiles: async (files, discordUserId) => {
+    const result = await api.importOpenClaws(files, discordUserId);
+    set((state) => ({
+      importPreviews: [...state.importPreviews, ...result.previews],
+    }));
+    if (result.errors.length > 0) {
+      throw new Error(result.errors.join('\n'));
+    }
   },
 
   claimClaw: async (id, discordUserId) => {
@@ -283,7 +288,12 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       const nextSpecimens = state.specimens.some((s) => s.id === specimen.id)
         ? state.specimens.map((s) => (s.id === specimen.id ? specimen : s))
         : [specimen, ...state.specimens];
-      return { claws: nextClaws, specimens: nextSpecimens, importPreview: null, screen: 'nursery' as Screen };
+      return {
+        claws: nextClaws,
+        specimens: nextSpecimens,
+        importPreviews: state.importPreviews.filter((preview) => preview.specimen.id !== specimen.id),
+        screen: 'nursery' as Screen,
+      };
     });
   },
 

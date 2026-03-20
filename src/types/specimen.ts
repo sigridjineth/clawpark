@@ -33,6 +33,11 @@ export interface ImportPreview {
   specimen: Specimen;
 }
 
+export interface ImportBatchResult {
+  previews: ImportPreview[];
+  errors: string[];
+}
+
 export type EligibilityResult =
   | {
     eligible: true;

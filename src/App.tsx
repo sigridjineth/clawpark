@@ -160,10 +160,10 @@ function App() {
     birthPhase,
     setBirthPhase,
     homePayload,
-    importPreview,
+    importPreviews,
     fetchHome,
     fetchSpecimens,
-    importClaw,
+    importZipFiles,
     claimClaw,
     claimMarketplaceClaw,
     importClaws,
@@ -209,7 +209,13 @@ function App() {
   }, [breedResult, claws, selectedClaws]);
 
   const handleClearPreview = useCallback(() => {
-    useClawStore.setState({ importPreview: null });
+    useClawStore.setState({ importPreviews: [] });
+  }, []);
+
+  const handleDismissPreview = useCallback((specimenId: string) => {
+    useClawStore.setState((state) => ({
+      importPreviews: state.importPreviews.filter((preview) => preview.specimen.id !== specimenId),
+    }));
   }, []);
 
   return (
@@ -263,10 +269,11 @@ function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Import
-                  onImport={importClaw}
+                  onImport={importZipFiles}
                   onClaim={claimClaw}
-                  importPreview={importPreview}
+                  importPreviews={importPreviews}
                   onClearPreview={handleClearPreview}
+                  onDismissPreview={handleDismissPreview}
                   discordUserId={homePayload?.connected_identity?.discordUserId}
                 />
               </motion.div>

@@ -42,6 +42,8 @@ export interface BreedingRunRow {
 }
 
 export function createSpecimenStore(db: SqliteDatabase) {
+  const CONSENT_TIMEOUT_HOURS = 24;
+
   const insertImport = db.prepare(`
     INSERT INTO import_records (id, source_kind, uploaded_at, included_files, ignored_files, warnings, fingerprint, parsed_specimen_id, discord_user_id)
     VALUES (?, 'openclaw_zip', ?, ?, ?, ?, ?, ?, ?)
@@ -87,7 +89,11 @@ export function createSpecimenStore(db: SqliteDatabase) {
     importSpecimen(claw: Claw, manifest: { includedFiles: string[]; ignoredFiles: string[]; warnings: string[] }, fingerprint: string, discordUserId?: string) {
       const now = new Date().toISOString();
       const importId = `imp-${randomUUID().slice(0, 8)}`;
-      const specimenId = claw.id || `spec-${randomUUID().slice(0, 8)}`;
+      const specimenId = `spec-${randomUUID().slice(0, 8)}`;
+      const storedClaw: Claw = {
+        ...claw,
+        id: specimenId,
+      };
 
       insertImport.run(
         importId, now,
@@ -100,7 +106,7 @@ export function createSpecimenStore(db: SqliteDatabase) {
       );
 
       insertSpecimen.run(
-        specimenId, claw.name, JSON.stringify(claw),
+        specimenId, storedClaw.name, JSON.stringify(storedClaw),
         'imported', discordUserId ?? null, importId,
         null, null, now, now,
       );
@@ -275,7 +281,7 @@ export function createSpecimenStore(db: SqliteDatabase) {
       `).run(id, params.parentAId, params.parentBId, params.requesterId, consentStatus, params.intentId ?? null, now);
 
       if (!autoApprove) {
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+        const expiresAt = new Date(Date.now() + CONSENT_TIMEOUT_HOURS * 60 * 60 * 1000).toISOString();
         const owners = new Set<string>();
         if (ownerA && ownerA !== params.requesterId) owners.add(ownerA);
         if (ownerB && ownerB !== params.requesterId) owners.add(ownerB);

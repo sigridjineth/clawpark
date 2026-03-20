@@ -90,4 +90,22 @@ describe('openclaw bundle parsers', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('falls back to the zip filename when IDENTITY.md still contains template placeholders', async () => {
+    const { dir, zipPath } = createWorkspaceZip({
+      'IDENTITY.md': '# **\n\nIDENTITY.md\n\nWho Am I?\n\nFill this in during your first conversation. Make it yours.\n\nName: **\nCreature: **\nVibe: **\nEmoji: **\n',
+      'SOUL.md': '# Soul\nAnalyze systems and protect the hatchery.\n',
+    });
+    const renamedZipPath = join(dir, 'dgxspark-claw.zip');
+    execFileSync('mv', [zipPath, renamedZipPath]);
+
+    try {
+      const result = await parseOpenClawWorkspaceZip(renamedZipPath);
+      expect(result.claw.name).toBe('dgxspark-claw');
+      expect(result.claw.identity?.creature).toBe('OpenClaw Hatchling');
+      expect(result.claw.identity?.emoji).toBe('🧬');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

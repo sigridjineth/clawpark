@@ -6,15 +6,17 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'ClawPark Marketplace API',
+      title: 'ClawPark API',
       version: '1.0.0',
       description:
-        'OpenAPI document for the ClawPark marketplace server, including auth/session, marketplace publish flows, bundle download, and OpenClaw skill installation.',
+        'OpenAPI document for the shipped ClawPark server, including /api/v1 specimen flows, marketplace/auth routes, mock-commerce routes, bundle download, and skill installation.',
     },
     servers: [{ url: serverUrl(config) }],
     tags: [
+      { name: 'v1', description: 'Specimen import, nursery, lineage, and breeding routes under /api/v1.' },
       { name: 'auth', description: 'Discord auth session and OAuth routes.' },
       { name: 'marketplace', description: 'Marketplace listings, drafts, bundles, and install routes.' },
+      { name: 'mock-commerce', description: 'Mock portfolio, listing mutation, purchase, provenance, and breeding routes.' },
       { name: 'docs', description: 'OpenAPI and human-readable API docs.' },
     ],
     components: {
@@ -76,6 +78,91 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
           description: 'Bundle payload for a marketplace listing. Claw bundles return JSON; skill bundles download as ZIP.',
           additionalProperties: true,
         },
+        HomePayload: {
+          type: 'object',
+          description: 'Current ClawPark home payload from /api/v1/home.',
+          additionalProperties: true,
+        },
+        Specimen: {
+          type: 'object',
+          description: 'Normalized specimen record returned by /api/v1 specimen endpoints.',
+          additionalProperties: true,
+        },
+        ImportRecord: {
+          type: 'object',
+          description: 'Import record metadata for an uploaded OpenClaw ZIP.',
+          additionalProperties: true,
+        },
+        ImportPreview: {
+          type: 'object',
+          description: 'Combined import response containing specimen + import record.',
+          additionalProperties: true,
+        },
+        EligibilityResult: {
+          type: 'object',
+          description: 'Breeding eligibility response for /api/v1 pair checks.',
+          additionalProperties: true,
+        },
+        BreedingRunResult: {
+          type: 'object',
+          description: 'Immediate breeding execution response from /api/v1/breeding/runs.',
+          additionalProperties: true,
+        },
+        BreedingRunRecord: {
+          type: 'object',
+          description: 'Stored breeding run record.',
+          additionalProperties: true,
+        },
+        BreedingIntent: {
+          type: 'object',
+          description: 'Stored breeding intent for Discord/web flows.',
+          additionalProperties: true,
+        },
+        BreedingProposal: {
+          type: 'object',
+          description: 'Stored breeding proposal / consent record.',
+          additionalProperties: true,
+        },
+        LineageTree: {
+          type: 'object',
+          description: 'Recursive lineage tree for a specimen.',
+          additionalProperties: true,
+        },
+        MockMe: {
+          type: 'object',
+          description: 'Current mock-commerce user/session payload.',
+          additionalProperties: true,
+        },
+        MockInventoryResponse: {
+          type: 'object',
+          description: 'Mock inventory response from /api/my/claws.',
+          additionalProperties: true,
+        },
+        MockListingSnapshot: {
+          type: 'object',
+          description: 'Mock listing snapshot used by mock-commerce browse/seller flows.',
+          additionalProperties: true,
+        },
+        MockTransactionsResponse: {
+          type: 'object',
+          description: 'Mock transaction feed response.',
+          additionalProperties: true,
+        },
+        MockPurchaseResponse: {
+          type: 'object',
+          description: 'Mock purchase receipt/transfer response.',
+          additionalProperties: true,
+        },
+        MockBreedRunResponse: {
+          type: 'object',
+          description: 'Mock breeding response for owned specimens.',
+          additionalProperties: true,
+        },
+        MockProvenanceResponse: {
+          type: 'object',
+          description: 'Mock provenance / event history for a claw.',
+          additionalProperties: true,
+        },
         SkillInstallRequest: {
           type: 'object',
           properties: {
@@ -126,6 +213,402 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
               content: {
                 'text/html': {
                   schema: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/home': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get nursery/home status and suggested next actions',
+          responses: {
+            200: {
+              description: 'Current home payload',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/HomePayload' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/imports/openclaw': {
+        post: {
+          tags: ['v1'],
+          summary: 'Import an OpenClaw workspace ZIP',
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    file: { type: 'string', format: 'binary' },
+                    discord_user_id: { type: 'string' },
+                  },
+                  required: ['file'],
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Parsed import preview',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ImportPreview' },
+                },
+              },
+            },
+            400: {
+              description: 'Import failed',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/imports/{id}': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get an import record',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Import record',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ImportRecord' },
+                },
+              },
+            },
+            404: {
+              description: 'Import record not found',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/specimens': {
+        get: {
+          tags: ['v1'],
+          summary: 'List specimens in the local nursery',
+          parameters: [
+            { name: 'ownership_state', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'discord_user_id', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Specimen list',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      specimens: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/Specimen' },
+                      },
+                      total: { type: 'integer' },
+                    },
+                    required: ['specimens', 'total'],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/specimens/{id}': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get a single specimen',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Specimen',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Specimen' },
+                },
+              },
+            },
+            404: {
+              description: 'Specimen not found',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/specimens/{id}/claim': {
+        post: {
+          tags: ['v1'],
+          summary: 'Claim an imported specimen',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          requestBody: {
+            required: false,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    discord_user_id: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Claimed specimen',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/Specimen' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/lineages/{id}': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get a specimen lineage tree',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Lineage tree',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/LineageTree' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/eligibility': {
+        get: {
+          tags: ['v1'],
+          summary: 'Check pair breeding eligibility in the /api/v1 specimen domain',
+          parameters: [
+            { name: 'parentA', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'parentB', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Eligibility result',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/EligibilityResult' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/runs': {
+        post: {
+          tags: ['v1'],
+          summary: 'Run breeding for two /api/v1 specimens',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    parentA: { type: 'string' },
+                    parentB: { type: 'string' },
+                    prompt: { type: 'string' },
+                  },
+                  required: ['parentA', 'parentB'],
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Breeding result',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingRunResult' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/runs/{id}': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get a stored /api/v1 breeding run',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Breeding run record',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingRunRecord' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/runs/{id}/save': {
+        post: {
+          tags: ['v1'],
+          summary: 'Mark a breeding run as saved',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Saved breeding run record',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingRunRecord' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/discord/intents': {
+        post: {
+          tags: ['v1'],
+          summary: 'Create a breeding intent from web/Discord input',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    source_message: { type: 'string' },
+                    requester_identity: { type: 'string' },
+                    target_specimen_ids: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    source_surface: { type: 'string' },
+                  },
+                  required: ['source_message'],
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Breeding intent created',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingIntent' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/discord/intents/{id}': {
+        get: {
+          tags: ['v1'],
+          summary: 'Get a breeding intent',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Breeding intent',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingIntent' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/proposals': {
+        post: {
+          tags: ['v1'],
+          summary: 'Create a breeding proposal / consent request',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    parentAId: { type: 'string' },
+                    parentBId: { type: 'string' },
+                    requesterId: { type: 'string' },
+                    intentId: { type: 'string' },
+                  },
+                  required: ['parentAId', 'parentBId'],
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Proposal created',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingProposal' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/breeding/proposals/{id}/consent': {
+        post: {
+          tags: ['v1'],
+          summary: 'Approve or reject a breeding proposal',
+          security: [{ cookieSession: [] }],
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', enum: ['approved', 'rejected'] },
+                  },
+                  required: ['status'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Updated proposal',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BreedingProposal' },
                 },
               },
             },
@@ -323,6 +806,42 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
             },
           },
         },
+        post: {
+          tags: ['mock-commerce'],
+          summary: 'Create a mock marketplace listing for an owned specimen',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    specimenId: { type: 'string' },
+                    price: {
+                      type: 'object',
+                      properties: {
+                        amount: { type: 'number' },
+                        currency: { type: 'string' },
+                      },
+                      required: ['amount'],
+                    },
+                  },
+                  required: ['specimenId', 'price'],
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'Mock listing created',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockListingSnapshot' },
+                },
+              },
+            },
+          },
+        },
       },
       '/api/marketplace/listings/{slug}': {
         get: {
@@ -349,6 +868,49 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
               description: 'Listing not found',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+        patch: {
+          tags: ['mock-commerce'],
+          summary: 'Update a mock listing price',
+          parameters: [
+            {
+              name: 'slug',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    price: {
+                      type: 'object',
+                      properties: {
+                        amount: { type: 'number' },
+                        currency: { type: 'string' },
+                      },
+                      required: ['amount'],
+                    },
+                  },
+                  required: ['price'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Updated mock listing',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockListingSnapshot' },
+                },
               },
             },
           },
@@ -516,6 +1078,263 @@ export function buildOpenApiSpec(config: { publicOrigin: string }) {
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/MarketplaceListing' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/me': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get the current mock-commerce identity/session payload',
+          responses: {
+            200: {
+              description: 'Mock current user',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockMe' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/me/summary': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get the current mock-commerce portfolio summary',
+          responses: {
+            200: {
+              description: 'Mock portfolio summary',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockMe' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/my/claws': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'List owned mock-commerce specimens',
+          parameters: [
+            { name: 'inventoryState', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'breedable', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'sourceKind', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock inventory response',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockInventoryResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/my/claws/{specimenId}': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get mock specimen detail',
+          parameters: [
+            { name: 'specimenId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock specimen detail',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockInventoryResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/my/claws/{specimenId}/activity': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get mock activity for one specimen',
+          parameters: [
+            { name: 'specimenId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock specimen activity list',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: { type: 'object', additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/my/transactions': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'List mock-commerce transaction events',
+          responses: {
+            200: {
+              description: 'Mock transaction feed',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockTransactionsResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/marketplace/mock-listings': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'List public mock-commerce listings',
+          responses: {
+            200: {
+              description: 'Public mock listings',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: { $ref: '#/components/schemas/MockListingSnapshot' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/marketplace/listings/{slug}/delist': {
+        post: {
+          tags: ['mock-commerce'],
+          summary: 'Delist a mock-commerce listing',
+          parameters: [
+            { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Delisted mock listing',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockListingSnapshot' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/marketplace/listings/{slug}/relist': {
+        post: {
+          tags: ['mock-commerce'],
+          summary: 'Relist a mock-commerce listing',
+          parameters: [
+            { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Relisted mock listing',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockListingSnapshot' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/marketplace/listings/{slug}/purchase': {
+        post: {
+          tags: ['mock-commerce'],
+          summary: 'Purchase a mock-commerce listing',
+          parameters: [
+            { name: 'slug', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock purchase completed',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockPurchaseResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/breeding/eligibility': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get mock breeding eligibility for one owned specimen',
+          parameters: [
+            { name: 'specimenId', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock breeding eligibility',
+              content: {
+                'application/json': {
+                  schema: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/breeding/runs': {
+        post: {
+          tags: ['mock-commerce'],
+          summary: 'Run mock breeding for owned specimens',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    parentASpecimenId: { type: 'string' },
+                    parentBSpecimenId: { type: 'string' },
+                    preferredTraitId: { type: 'string' },
+                    breedPrompt: { type: 'string' },
+                  },
+                  required: ['parentASpecimenId', 'parentBSpecimenId'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Mock breeding result',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockBreedRunResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/claws/{clawId}/provenance': {
+        get: {
+          tags: ['mock-commerce'],
+          summary: 'Get mock provenance history for a claw',
+          parameters: [
+            { name: 'clawId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            200: {
+              description: 'Mock provenance history',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MockProvenanceResponse' },
                 },
               },
             },
