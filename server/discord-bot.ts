@@ -80,7 +80,10 @@ export function isInheritanceQuestion(message: string) {
 }
 
 export function isExportQuestion(message: string) {
-  return /can i download|download .*claw|download .*specimen|make it downloadable|zip file|zip all of the files|export .*claw|export .*specimen/i.test(message.toLowerCase());
+  const lower = message.toLowerCase();
+  return /\b(download(?:[-\s]?able)?|export)\b/.test(lower)
+    || /\bzip(?:\s+file)?\b/.test(lower)
+    || /내려받|다운로드/.test(lower);
 }
 
 export function extractNumberSelections(message: string) {
@@ -323,6 +326,34 @@ export function formatRandomBreedSuccessReply(params: {
   ].join('\n');
 }
 
+function appendZipAttachmentNotice(message: string) {
+  const next = `${message}\n\n📦 Downloadable ZIP workspace attached.`;
+  return next.length > 1900 ? message : next;
+}
+
+async function replyWithOptionalSpecimenZip(
+  msg: Message,
+  deps: DiscordBotDeps,
+  specimenId: string | undefined,
+  content: string,
+) {
+  if (!specimenId || !deps.exportSpecimenBundle) {
+    await msg.reply(content);
+    return;
+  }
+
+  const exported = await deps.exportSpecimenBundle(specimenId);
+  if (!exported) {
+    await msg.reply(content);
+    return;
+  }
+
+  await msg.reply({
+    content: appendZipAttachmentNotice(content),
+    files: [new AttachmentBuilder(exported.buffer, { name: exported.filename })],
+  });
+}
+
 function resolveTargetSpecimenId(
   message: string,
   parsedNames: string[],
@@ -537,7 +568,7 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
 
     markIntentSaved(randomIntent.intentId);
     if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
-    await msg.reply(formatRandomBreedSuccessReply({
+    await replyWithOptionalSpecimenZip(msg, deps, result.childId, formatRandomBreedSuccessReply({
       chosen,
       breedableCount: breedableChoices.length,
       childName: result.childName,
@@ -636,10 +667,11 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       const result = await executeBreed(last.intentId, orchestratorDeps);
       if (result.childName && result.lineageSummary) {
         markIntentSaved(last.intentId);
+        if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
         const response = await generateResponse(
-          `Breeding successful! A new specimen "${result.childName}" was born. Lineage: ${result.lineageSummary}. Announce the birth excitedly and mention the child has been saved to the nursery.`,
+          `Breeding successful! A new specimen "${result.childName}" was born. Lineage: ${result.lineageSummary}. Announce the birth excitedly, mention the child has been saved to the nursery, and say that a downloadable ZIP workspace is attached.`,
         );
-        await msg.reply(response);
+        await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
       }
       return;
     }
@@ -648,10 +680,11 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       const result = await executeBreed(last.intentId, orchestratorDeps);
       if (result.childName && result.lineageSummary) {
         markIntentSaved(last.intentId);
+        if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
         const response = await generateResponse(
-          `Breeding successful! A new specimen "${result.childName}" was born. Lineage: ${result.lineageSummary}. Announce the birth excitedly.`,
+          `Breeding successful! A new specimen "${result.childName}" was born. Lineage: ${result.lineageSummary}. Announce the birth excitedly and say that a downloadable ZIP workspace is attached.`,
         );
-        await msg.reply(response);
+        await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
       }
       return;
     }
@@ -765,9 +798,9 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       markIntentSaved(intent.intentId);
       if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
       const response = await generateResponse(
-        `Breeding successful! Parents: ${parsed.mentionedNames.join(' + ')}. Child: "${result.childName}". Lineage: ${result.lineageSummary}. Announce the birth! The child has been saved to the nursery.`,
+        `Breeding successful! Parents: ${parsed.mentionedNames.join(' + ')}. Child: "${result.childName}". Lineage: ${result.lineageSummary}. Announce the birth! The child has been saved to the nursery and a downloadable ZIP workspace is attached.`,
       );
-      await msg.reply(response);
+      await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
     } else {
       const response = await generateResponse(
         `Breeding between ${parsed.mentionedNames.join(' and ')} failed unexpectedly. Apologize and suggest trying again.`,

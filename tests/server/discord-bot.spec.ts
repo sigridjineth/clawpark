@@ -71,6 +71,9 @@ describe('discord bot helpers', () => {
     expect(isSpecimenDetailQuestion('tell me the details of new Quartz')).toBe(true);
     expect(isInheritanceQuestion('what things changed/inherited from its parent')).toBe(true);
     expect(isExportQuestion('can you make it downloadable zip file for quartz?')).toBe(true);
+    expect(isExportQuestion('can you make it download-able?')).toBe(true);
+    expect(isExportQuestion('download halo')).toBe(true);
+    expect(isExportQuestion('download zip file')).toBe(true);
   });
 
   it('extracts numbered selections and the use-both shorthand', () => {
