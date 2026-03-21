@@ -1,3 +1,4 @@
+import { deriveToolLoadout } from './openclaw';
 import type { InheritanceRecord, SkillBadge, SoulTrait, ToolBadge, TraitOrigin } from '../types/claw';
 
 type Candidate<T extends { id: string; label: string }> = {
@@ -5,6 +6,38 @@ type Candidate<T extends { id: string; label: string }> = {
   score: number;
   origin: TraitOrigin;
 };
+
+const STEERING_ALIASES: Record<string, string[]> = {
+  critique: ['skeptic', 'skeptical', 'review', 'challenge', 'critic'],
+  caution: ['cautious', 'careful', 'safe', 'safety', 'verify', 'guardrail'],
+  documentation: ['document', 'trace', 'notes', 'write', 'record'],
+  systems: ['system', 'systems', 'architecture', 'workflow', 'orchestrate'],
+  curiosity: ['curious', 'explore', 'discover', 'novel'],
+  creativity: ['creative', 'imagine', 'invent'],
+  security: ['security', 'secure', 'sandbox', 'guard'],
+  debugging: ['debug', 'bug', 'fix', 'diagnose'],
+  testing: ['test', 'qa', 'validate'],
+  'code review': ['review', 'audit', 'pr'],
+  'workflow grid': ['workflow', 'pipeline', 'orchestrate'],
+  'sandbox ward': ['sandbox', 'guard', 'safe', 'safety'],
+  'search probe': ['search', 'inspect', 'investigate'],
+  'launch rail': ['launch', 'ship', 'release'],
+};
+
+function promptSignalScore(steeringPrompt: string | undefined, item: { label: string; description?: string }) {
+  if (!steeringPrompt) return 0;
+  const lower = steeringPrompt.toLowerCase();
+  const label = item.label.toLowerCase();
+  const labelHit = lower.includes(label) ? 0.45 : 0;
+  const aliasHits = (STEERING_ALIASES[label] ?? []).reduce((sum, token) => sum + (lower.includes(token) ? 0.12 : 0), 0);
+  const descriptionWords = (item.description ?? '')
+    .toLowerCase()
+    .split(/[^a-z0-9가-힣]+/)
+    .filter((token) => token.length >= 4)
+    .slice(0, 6);
+  const descriptionHits = descriptionWords.reduce((sum, token) => sum + (lower.includes(token) ? 0.05 : 0), 0);
+  return Math.min(0.7, labelHit + aliasHits + descriptionHits);
+}
 
 function inheritanceDetail(type: 'soul' | 'skill' | 'tool', label: string, origin: TraitOrigin) {
   const noun = type === 'soul' ? 'SOUL strand' : type === 'skill' ? 'SKILL routine' : 'TOOL loadout';
@@ -76,6 +109,7 @@ function mergeTraitPool(
   traitsA: SoulTrait[],
   traitsB: SoulTrait[],
   preferredTraitId: string | undefined,
+  steeringPrompt: string | undefined,
 ): Candidate<SoulTrait>[] {
   const map = new Map<string, Candidate<SoulTrait>>();
 
@@ -99,14 +133,16 @@ function mergeTraitPool(
 
   const candidates = [...map.values()].map((candidate) => {
     const score =
-      candidate.item.id === preferredTraitId ? Math.min(1, candidate.score * 1.5) : candidate.score;
+      candidate.item.id === preferredTraitId
+        ? Math.min(1, candidate.score * 1.5)
+        : Math.min(1, candidate.score + promptSignalScore(steeringPrompt, candidate.item));
     return { ...candidate, score };
   });
 
   return candidates.sort((left, right) => right.score - left.score);
 }
 
-function mergeSkillPool(badgesA: SkillBadge[], badgesB: SkillBadge[]): Candidate<SkillBadge>[] {
+function mergeSkillPool(badgesA: SkillBadge[], badgesB: SkillBadge[], steeringPrompt: string | undefined): Candidate<SkillBadge>[] {
   const map = new Map<string, Candidate<SkillBadge>>();
 
   const register = (badge: SkillBadge, origin: Exclude<TraitOrigin, 'both' | 'mutation'>) => {
@@ -127,10 +163,20 @@ function mergeSkillPool(badgesA: SkillBadge[], badgesB: SkillBadge[]): Candidate
   badgesA.forEach((badge) => register(badge, 'parentA'));
   badgesB.forEach((badge) => register(badge, 'parentB'));
 
-  return [...map.values()].sort((left, right) => right.score - left.score);
+  return [...map.values()]
+    .map((candidate) => ({
+      ...candidate,
+      score: Math.min(1, candidate.score + promptSignalScore(steeringPrompt, candidate.item)),
+    }))
+    .sort((left, right) => right.score - left.score);
 }
 
-function mergeToolPool(loadoutA: ToolBadge[], loadoutB: ToolBadge[]): Candidate<ToolBadge>[] {
+function mergeToolPool(
+  loadoutA: ToolBadge[],
+  loadoutB: ToolBadge[],
+  steeringPrompt: string | undefined,
+  emergentSkills: SkillBadge[],
+): Candidate<ToolBadge>[] {
   const map = new Map<string, Candidate<ToolBadge>>();
 
   const register = (tool: ToolBadge, origin: Exclude<TraitOrigin, 'both' | 'mutation'>) => {
@@ -151,7 +197,26 @@ function mergeToolPool(loadoutA: ToolBadge[], loadoutB: ToolBadge[]): Candidate<
   loadoutA.forEach((tool) => register(tool, 'parentA'));
   loadoutB.forEach((tool) => register(tool, 'parentB'));
 
-  return [...map.values()].sort((left, right) => right.score - left.score);
+  const derivedTools = deriveToolLoadout(emergentSkills);
+  for (const tool of derivedTools) {
+    const existing = map.get(tool.id);
+    if (existing) {
+      existing.score = Math.min(1, existing.score + 0.2);
+      continue;
+    }
+    map.set(tool.id, {
+      item: tool,
+      score: Math.min(1, tool.potency + 0.15),
+      origin: emergentSkills.some((skill) => skill.id.startsWith('mutation-')) ? 'mutation' : 'both',
+    });
+  }
+
+  return [...map.values()]
+    .map((candidate) => ({
+      ...candidate,
+      score: Math.min(1, candidate.score + promptSignalScore(steeringPrompt, candidate.item)),
+    }))
+    .sort((left, right) => right.score - left.score);
 }
 
 export function inheritSoulTraits(
@@ -159,8 +224,9 @@ export function inheritSoulTraits(
   traitsB: SoulTrait[],
   preferredTraitId: string | undefined,
   rng: () => number,
+  steeringPrompt?: string,
 ): SoulInheritanceResult {
-  const candidates = mergeTraitPool(traitsA, traitsB, preferredTraitId);
+  const candidates = mergeTraitPool(traitsA, traitsB, preferredTraitId, steeringPrompt);
   const selectedCandidates = weightedTake(candidates, 3, rng);
   const selectedIds = new Set(selectedCandidates.map((candidate) => candidate.item.id));
 
@@ -186,8 +252,9 @@ export function inheritSkillBadges(
   badgesA: SkillBadge[],
   badgesB: SkillBadge[],
   rng: () => number,
+  steeringPrompt?: string,
 ): SkillInheritanceResult {
-  const candidates = mergeSkillPool(badgesA, badgesB);
+  const candidates = mergeSkillPool(badgesA, badgesB, steeringPrompt);
   const selectedCandidates = weightedTake(candidates, 3, rng);
   const selectedIds = new Set(selectedCandidates.map((candidate) => candidate.item.id));
 
@@ -213,8 +280,10 @@ export function inheritToolBadges(
   loadoutA: ToolBadge[],
   loadoutB: ToolBadge[],
   rng: () => number,
+  steeringPrompt?: string,
+  emergentSkills: SkillBadge[] = [],
 ): ToolInheritanceResult {
-  const candidates = mergeToolPool(loadoutA, loadoutB);
+  const candidates = mergeToolPool(loadoutA, loadoutB, steeringPrompt, emergentSkills);
   const selectedCandidates = weightedTake(candidates, 3, rng);
   const selectedIds = new Set(selectedCandidates.map((candidate) => candidate.item.id));
 

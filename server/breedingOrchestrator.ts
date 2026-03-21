@@ -58,6 +58,7 @@ export function createIntent(params: {
     targetSpecimenIds: params.targetSpecimenIds ?? [],
     status: 'intent_created',
     suggestedCandidates: [],
+    awaitingSteering: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -251,5 +252,21 @@ export function cancelIntent(intentId: string, reason?: string): BreedingIntent 
   intent.status = 'cancelled';
   intent.blockReason = reason ?? 'Cancelled by user';
   if (intent.proposalId) consentStore.cancelProposal(intent.proposalId);
+  return touchIntent(intent);
+}
+
+export function setIntentSteeringQuestion(intentId: string, question: string): BreedingIntent {
+  const intent = intentStore.get(intentId);
+  if (!intent) throw new Error(`Intent not found: ${intentId}`);
+  intent.awaitingSteering = true;
+  intent.steeringQuestion = question;
+  return touchIntent(intent);
+}
+
+export function setIntentSteeringResponse(intentId: string, response: string): BreedingIntent {
+  const intent = intentStore.get(intentId);
+  if (!intent) throw new Error(`Intent not found: ${intentId}`);
+  intent.awaitingSteering = false;
+  intent.steeringResponse = response;
   return touchIntent(intent);
 }

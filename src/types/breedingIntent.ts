@@ -41,6 +41,9 @@ export interface BreedingIntent {
   targetSpecimenIds: string[];
   status: IntentStatus;
   suggestedCandidates: CandidateSuggestion[];
+  awaitingSteering?: boolean;
+  steeringQuestion?: string;
+  steeringResponse?: string;
   proposalId?: string;
   runId?: string;
   resultChildId?: string;

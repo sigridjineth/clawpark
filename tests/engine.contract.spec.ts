@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { breed } from "../src/engine/breed";
-import { inheritSkillBadges, inheritSoulTraits } from "../src/engine/inherit";
+import { inheritSkillBadges, inheritSoulTraits, inheritToolBadges } from "../src/engine/inherit";
 import { predictBreed } from "../src/engine/predict";
 import { createParentPair, createSharedParentPair } from "./clawFixtures";
 
@@ -83,5 +83,47 @@ describe("ClawPark engine contracts", () => {
     expect(baseline.mutationChance).toBeLessThanOrEqual(0.15);
     expect(baseline.predictedArchetype).toMatch(/^The\s.+/);
     expect(boostedPreferred?.probability ?? 0).toBeGreaterThanOrEqual(baselinePreferred?.probability ?? 0);
+  });
+
+  it("uses steering text to bias inheritance toward the requested dimension", () => {
+    const traitsA = [
+      { id: "analysis", label: "Analysis", description: "Break systems down carefully.", weight: 0.9, color: "#fff", visualSymbol: { shapeModifier: "geometric", description: "" } },
+      { id: "systems", label: "Systems", description: "Think in workflows.", weight: 0.8, color: "#fff", visualSymbol: { shapeModifier: "grid", description: "" } },
+      { id: "caution", label: "Caution", description: "Verify twice before acting.", weight: 0.3, color: "#fff", visualSymbol: { shapeModifier: "symmetric", description: "" } },
+    ];
+    const traitsB = [
+      { id: "curiosity", label: "Curiosity", description: "Explore the unknown.", weight: 0.8, color: "#fff", visualSymbol: { shapeModifier: "organic", description: "" } },
+      { id: "documentation", label: "Documentation", description: "Leave a clear trace.", weight: 0.35, color: "#fff", visualSymbol: { shapeModifier: "crystalline", description: "" } },
+      { id: "creativity", label: "Creativity", description: "Invent new paths.", weight: 0.75, color: "#fff", visualSymbol: { shapeModifier: "spiral", description: "" } },
+    ];
+
+    const withoutPrompt = inheritSoulTraits(traitsA, traitsB, undefined, () => 0);
+    const withPrompt = inheritSoulTraits(traitsA, traitsB, undefined, () => 0, "Please make the child strong at documentation and leaving a trace.");
+
+    expect(withoutPrompt.selected.map((trait) => trait.id)).not.toContain("documentation");
+    expect(withPrompt.selected.map((trait) => trait.id)).toContain("documentation");
+  });
+
+  it("recomputes tool inheritance from final skills so mutated skill loadouts can surface", () => {
+    const loadoutA = [
+      { id: "tool-search-probe", label: "Search Probe", icon: "🔎", description: "Search", potency: 0.9, color: "#fff" },
+      { id: "tool-workflow-grid", label: "Workflow Grid", icon: "🧭", description: "Workflow", potency: 0.8, color: "#fff" },
+      { id: "tool-launch-rail", label: "Launch Rail", icon: "🚀", description: "Launch", potency: 0.7, color: "#fff" },
+    ];
+    const loadoutB = [
+      { id: "tool-sandbox-ward", label: "Sandbox Ward", icon: "🛡️", description: "Sandbox", potency: 0.9, color: "#fff" },
+      { id: "tool-search-probe", label: "Search Probe", icon: "🔎", description: "Search", potency: 0.8, color: "#fff" },
+      { id: "tool-radar-array", label: "Radar Array", icon: "📡", description: "Radar", potency: 0.7, color: "#fff" },
+    ];
+
+    const tools = inheritToolBadges(
+      loadoutA,
+      loadoutB,
+      () => 0,
+      "Please keep the child coordinating the team from an orbit board.",
+      [{ id: "mutation-swarm", label: "Swarm Sync", icon: "Orbit", dominance: 0.92, color: "#fff" }],
+    );
+
+    expect(tools.selected.map((tool) => tool.id)).toContain("tool-orbit-board");
   });
 });

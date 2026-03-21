@@ -18,6 +18,8 @@ import {
   executeBreed,
   getUserLastIntent,
   markIntentSaved,
+  setIntentSteeringQuestion,
+  setIntentSteeringResponse,
   setUserLastIntent,
   suggestCandidates,
 } from './breedingOrchestrator.ts';
@@ -326,6 +328,20 @@ export function formatRandomBreedSuccessReply(params: {
   ].join('\n');
 }
 
+function describeBreedingPair(pair: ResolvedSpecimen[]) {
+  return pair.map((specimen) => specimen.name).join(' + ');
+}
+
+function defaultSteeringPrompt(pair: ResolvedSpecimen[]) {
+  return `Blend ${describeBreedingPair(pair)} into a child that feels balanced, useful, and distinct in the park.`;
+}
+
+async function generateBreedingInterviewQuestion(pair: ResolvedSpecimen[], randomPick = false) {
+  return generateResponse(
+    `You are helping a user steer a ClawPark breeding run. Parents: ${describeBreedingPair(pair)}. Inspired by natural-language feedback loops like MetaClaw and OpenClaw-RL, ask exactly one short follow-up question that helps steer the offspring's soul, skills, tools, or vibe before breeding.${randomPick ? ' Mention that the pair was randomly chosen.' : ''} Keep it under 55 words and end by telling the user to answer in 1-2 sentences.`,
+  );
+}
+
 function appendZipAttachmentNotice(message: string) {
   const next = `${message}\n\n📦 Downloadable ZIP workspace attached.`;
   return next.length > 1900 ? message : next;
@@ -352,6 +368,36 @@ async function replyWithOptionalSpecimenZip(
     content: appendZipAttachmentNotice(content),
     files: [new AttachmentBuilder(exported.buffer, { name: exported.filename })],
   });
+}
+
+async function executeIntentAndReply(
+  msg: Message,
+  deps: DiscordBotDeps,
+  orchestratorDeps: OrchestratorDeps,
+  intentId: string,
+  steeringPrompt: string | undefined,
+  successContext: string,
+  failureContext: string,
+  rememberAuthorId: string,
+) {
+  const { ready, blocked } = await checkEligibilityAndConsent(intentId, orchestratorDeps);
+  if (!ready) {
+    await msg.reply(blocked ? `${failureContext}: ${blocked}` : failureContext);
+    return;
+  }
+
+  const result = await executeBreed(intentId, orchestratorDeps, steeringPrompt);
+  if (!result.childName || !result.lineageSummary) {
+    await msg.reply(failureContext);
+    return;
+  }
+
+  markIntentSaved(intentId);
+  if (result.childId) rememberFocusedSpecimen(rememberAuthorId, result.childId);
+  const response = await generateResponse(successContext
+    .replace('{childName}', result.childName)
+    .replace('{lineageSummary}', result.lineageSummary));
+  await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
 }
 
 function resolveTargetSpecimenId(
@@ -459,6 +505,36 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
     ? `\nMentioned users: ${mentionedUsersList.map((u) => `${u.displayName} (mention tag: <@${u.id}>)`).join(', ')}. IMPORTANT: When referring to these users in your response, use their Discord mention tag (e.g. <@${mentionedUsersList[0]?.id}>) so they get notified.`
     : '';
   const allSpecimens = orchestratorDeps.listAllSpecimens?.() ?? orchestratorDeps.listBreedableSpecimens();
+  const lastIntent = getUserLastIntent(discordUserId);
+
+  if (lastIntent?.awaitingSteering
+    && parsed.action !== 'cancel'
+    && !isCountQuestion(userMessage)
+    && !isSpecimenInventoryQuestion(userMessage)
+    && !isSpecimenDetailQuestion(userMessage)
+    && !isInheritanceQuestion(userMessage)
+    && !isExportQuestion(userMessage)) {
+    const pair = lastIntent.targetSpecimenIds
+      .map((id) => orchestratorDeps.resolveSpecimenById(id))
+      .filter((specimen): specimen is ResolvedSpecimen => Boolean(specimen))
+      .slice(0, 2);
+    const steeringPrompt = /skip|just do it|surprise me|anything works|go ahead/i.test(userMessage)
+      ? defaultSteeringPrompt(pair)
+      : userMessage;
+    setIntentSteeringResponse(lastIntent.intentId, steeringPrompt);
+    await executeIntentAndReply(
+      msg,
+      deps,
+      orchestratorDeps,
+      lastIntent.intentId,
+      steeringPrompt,
+      `Breeding successful! Parents: ${describeBreedingPair(pair)}. User steering: ${steeringPrompt}. Child: "{childName}". Lineage: {lineageSummary}. Announce the birth excitedly, mention how the steering shaped the hatchling, and say the downloadable ZIP workspace is attached.`,
+      `I was ready to breed ${describeBreedingPair(pair)}, but the run failed`,
+      discordUserId,
+    );
+    return;
+  }
+
   if (isCountQuestion(userMessage)) {
     await msg.reply(formatCountReply(allSpecimens, requesterIdentity.discordUserId ?? ''));
     return;
@@ -553,28 +629,13 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       targetSpecimenIds: chosen.map((specimen) => specimen.id),
     });
     setUserLastIntent(discordUserId, randomIntent.intentId);
-
-    const { ready, blocked } = await checkEligibilityAndConsent(randomIntent.intentId, orchestratorDeps);
-    if (!ready) {
-      await msg.reply(`I randomly picked **${chosen[0].name}** and **${chosen[1].name}**, but breeding is blocked right now: ${blocked ?? 'eligibility check failed'}.`);
-      return;
-    }
-
-    const result = await executeBreed(randomIntent.intentId, orchestratorDeps);
-    if (!result.childName || !result.lineageSummary) {
-      await msg.reply(`I picked **${chosen[0].name}** and **${chosen[1].name}**, but the breeding run did not return a child result. Please try again.`);
-      return;
-    }
-
-    markIntentSaved(randomIntent.intentId);
-    if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
-    await replyWithOptionalSpecimenZip(msg, deps, result.childId, formatRandomBreedSuccessReply({
-      chosen,
-      breedableCount: breedableChoices.length,
-      childName: result.childName,
-      childId: result.childId,
-      lineageSummary: result.lineageSummary,
-    }));
+    const question = await generateBreedingInterviewQuestion(chosen, true);
+    setIntentSteeringQuestion(randomIntent.intentId, question);
+    await msg.reply([
+      `🎲 I picked **${chosen[0].name}** and **${chosen[1].name}** from the **${breedableChoices.length}** breedable claws in the park.`,
+      '',
+      question,
+    ].join('\n'));
     return;
   }
 
@@ -653,26 +714,13 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       if (last.targetSpecimenIds.length < 2 && last.suggestedCandidates.length > 0) {
         last.targetSpecimenIds.push(last.suggestedCandidates[0].specimenId);
       }
-
-      const { ready, blocked } = await checkEligibilityAndConsent(last.intentId, orchestratorDeps);
-      if (!ready) {
-        const statusContext = `Breeding blocked: ${blocked}`;
-        const response = await generateResponse(
-          `User wants to proceed with breeding but it's blocked. Reason: ${statusContext}. Explain the situation.`,
-        );
-        await msg.reply(response);
-        return;
-      }
-
-      const result = await executeBreed(last.intentId, orchestratorDeps);
-      if (result.childName && result.lineageSummary) {
-        markIntentSaved(last.intentId);
-        if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
-        const response = await generateResponse(
-          `Breeding successful! A new specimen "${result.childName}" was born. Lineage: ${result.lineageSummary}. Announce the birth excitedly, mention the child has been saved to the nursery, and say that a downloadable ZIP workspace is attached.`,
-        );
-        await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
-      }
+      const pair = last.targetSpecimenIds
+        .map((id) => orchestratorDeps.resolveSpecimenById(id))
+        .filter((specimen): specimen is ResolvedSpecimen => Boolean(specimen))
+        .slice(0, 2);
+      const question = await generateBreedingInterviewQuestion(pair, false);
+      setIntentSteeringQuestion(last.intentId, question);
+      await msg.reply(question);
       return;
     }
 
@@ -778,35 +826,17 @@ async function handleBreedMessage(msg: Message, deps: DiscordBotDeps): Promise<v
       return;
     }
 
-    // Both specimens resolved — check eligibility and breed
-    const { ready, blocked } = await checkEligibilityAndConsent(
-      intent.intentId,
-      orchestratorDeps,
-    );
-    if (!ready) {
-      const parentNames = parsed.mentionedNames.join(' and ');
-      const statusContext = `Cannot breed ${parentNames}: ${blocked}`;
-      const response = await generateResponse(
-        `Breeding blocked. ${statusContext}. Explain what the user needs to do next.`,
-      );
-      await msg.reply(response);
-      return;
-    }
-
-    const result = await executeBreed(intent.intentId, orchestratorDeps);
-    if (result.childName && result.lineageSummary) {
-      markIntentSaved(intent.intentId);
-      if (result.childId) rememberFocusedSpecimen(discordUserId, result.childId);
-      const response = await generateResponse(
-        `Breeding successful! Parents: ${parsed.mentionedNames.join(' + ')}. Child: "${result.childName}". Lineage: ${result.lineageSummary}. Announce the birth! The child has been saved to the nursery and a downloadable ZIP workspace is attached.`,
-      );
-      await replyWithOptionalSpecimenZip(msg, deps, result.childId, response);
-    } else {
-      const response = await generateResponse(
-        `Breeding between ${parsed.mentionedNames.join(' and ')} failed unexpectedly. Apologize and suggest trying again.`,
-      );
-      await msg.reply(response);
-    }
+    const pair = targetSpecimenIds
+      .map((id) => orchestratorDeps.resolveSpecimenById(id))
+      .filter((specimen): specimen is ResolvedSpecimen => Boolean(specimen))
+      .slice(0, 2);
+    const question = await generateBreedingInterviewQuestion(pair, false);
+    setIntentSteeringQuestion(intent.intentId, question);
+    await msg.reply([
+      `🧬 I can breed **${pair[0]?.name ?? parsed.mentionedNames[0]}** with **${pair[1]?.name ?? parsed.mentionedNames[1]}**.`,
+      '',
+      question,
+    ].join('\n'));
     return;
   }
 }

@@ -7,8 +7,9 @@ import { promisify } from 'node:util';
 import { SKILL_BADGES } from '../src/data/skillBadges.ts';
 import { SOUL_TRAITS } from '../src/data/soulTraits.ts';
 import { TOOL_BADGES } from '../src/data/toolBadges.ts';
+import { MUTATION_SKILLS, MUTATION_SOUL_TRAITS } from '../src/data/mutations.ts';
 import { getClawIdentity, getClawTools, summarizeSkills, summarizeSoul, summarizeTools } from '../src/engine/openclaw.ts';
-import type { Claw, ClawIdentity, ClawVisual, SkillBadge, SoulTrait } from '../src/types/claw.ts';
+import type { Claw, ClawIdentity, ClawLineage, ClawVisual, InheritanceKind, InheritanceRecord, SkillBadge, SoulTrait, ToolBadge, TraitOrigin } from '../src/types/claw.ts';
 import type { ClawBundleManifest, PublishedSkill, SkillBundleManifest } from '../src/types/marketplace.ts';
 
 const execFile = promisify(execFileCallback);
@@ -55,6 +56,13 @@ const TOOL_IDS_BY_SKILL: Record<string, string[]> = {
   'skill-velocity': ['tool-launch-rail', 'tool-forge-armature'],
 };
 
+const ALL_SOUL_TRAITS = [...SOUL_TRAITS, ...MUTATION_SOUL_TRAITS];
+const ALL_SKILL_BADGES = [...SKILL_BADGES, ...MUTATION_SKILLS];
+const ALL_TOOL_BADGES = [...TOOL_BADGES];
+const SOUL_TRAIT_BY_LABEL = new Map(ALL_SOUL_TRAITS.map((trait) => [trait.label.toLowerCase(), trait]));
+const SKILL_BADGE_BY_LABEL = new Map(ALL_SKILL_BADGES.map((badge) => [badge.label.toLowerCase(), badge]));
+const TOOL_BADGE_BY_LABEL = new Map(ALL_TOOL_BADGES.map((tool) => [tool.label.toLowerCase(), tool]));
+
 const TOOL_KEYWORDS: Record<string, string[]> = {
   'tool-search-probe': ['search', 'grep', 'query', 'look up', 'probe'],
   'tool-workflow-grid': ['workflow', 'pipeline', 'task', 'plan', 'orchestrate'],
@@ -77,6 +85,14 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeLabelKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9가-힣]+/g, '');
 }
 
 function normalizePath(value: string) {
@@ -151,6 +167,28 @@ function firstParagraph(markdown: string) {
   return parts[0] ?? null;
 }
 
+function extractSection(markdown: string, heading: string) {
+  const regex = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|\\n#\\s+|$)`, 'im');
+  return markdown.match(regex)?.[1]?.trim() ?? null;
+}
+
+function extractBulletedLabels(markdown: string, heading: string) {
+  const section = extractSection(markdown, heading);
+  if (!section) return [];
+  return section
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.replace(/^- /, '').split(/\s+[—-]\s+/)[0].trim())
+    .filter(Boolean);
+}
+
+function findByLabel<T extends { label: string }>(items: T[], exactMap: Map<string, T>, label: string) {
+  return exactMap.get(label.toLowerCase())
+    ?? items.find((item) => normalizeLabelKey(item.label) === normalizeLabelKey(label))
+    ?? null;
+}
+
 function extractEmoji(value: string) {
   const match = value.match(/\p{Extended_Pictographic}/u);
   return match?.[0] ?? null;
@@ -212,7 +250,88 @@ function fallbackTools(text: string, skills: SkillBadge[]) {
   return ranked.length > 0 ? ranked : deriveToolLoadout(skills);
 }
 
-function parseIdentity(identityMarkdown: string, soulMarkdown: string, fallbackNameHint: string): { name: string; identity: ClawIdentity; archetype: string; intro: string } {
+function parseExplicitSoulTraits(soulMarkdown: string) {
+  const labels = extractBulletedLabels(soulMarkdown, 'Traits');
+  const matched = labels
+    .map((label) => findByLabel(ALL_SOUL_TRAITS, SOUL_TRAIT_BY_LABEL, label))
+    .filter((trait): trait is SoulTrait => Boolean(trait));
+  return matched.length > 0 ? matched : null;
+}
+
+function parseExplicitTools(toolsMarkdown: string) {
+  const labels = extractBulletedLabels(toolsMarkdown, 'Loadout');
+  const matched = labels
+    .map((label) => findByLabel(ALL_TOOL_BADGES, TOOL_BADGE_BY_LABEL, label))
+    .filter((tool): tool is ToolBadge => Boolean(tool));
+  return matched.length > 0 ? matched : null;
+}
+
+function parseExplicitSkills(skillTexts: Array<{ path: string; text: string }>) {
+  const matched = skillTexts
+    .map(({ text }) => {
+      const frontmatter = parseFrontmatter(text);
+      const label = frontmatter.name || findField(text, ['name']) || firstHeading(text);
+      return label ? findByLabel(ALL_SKILL_BADGES, SKILL_BADGE_BY_LABEL, label) : null;
+    })
+    .filter((badge): badge is SkillBadge => Boolean(badge));
+  return matched.length > 0 ? matched : null;
+}
+
+function parseInheritanceMap(soulMarkdown: string): InheritanceRecord[] {
+  const section = extractSection(soulMarkdown, 'Inheritance');
+  if (!section) return [];
+
+  const records: InheritanceRecord[] = [];
+
+  for (const rawLine of section.split('\n')) {
+    const line = rawLine.trim();
+    if (!line.startsWith('- ')) continue;
+      const match = line.match(/^- (.+?) \((identity|soul|skill|tool)\) ← (parentA|parentB|both|mutation)(?: \[(inherited|dominant|fused|mutation)\])?(?: — (.+))?$/);
+      if (!match) continue;
+      const [, label, type, origin, kind, detail] = match;
+      const normalizedType = type as InheritanceRecord['type'];
+      const normalizedOrigin = origin as TraitOrigin;
+      const normalizedKind = (kind ?? (normalizedOrigin === 'mutation' ? 'mutation' : normalizedOrigin === 'both' ? 'fused' : 'inherited')) as InheritanceKind;
+      const traitId =
+        normalizedType === 'identity'
+          ? `identity-${slugify(label.split(':')[0]) || 'trait'}`
+          : normalizedType === 'soul'
+            ? findByLabel(ALL_SOUL_TRAITS, SOUL_TRAIT_BY_LABEL, label)?.id ?? `soul-${slugify(label)}`
+            : normalizedType === 'skill'
+              ? findByLabel(ALL_SKILL_BADGES, SKILL_BADGE_BY_LABEL, label)?.id ?? `skill-${slugify(label)}`
+              : findByLabel(ALL_TOOL_BADGES, TOOL_BADGE_BY_LABEL, label)?.id ?? `tool-${slugify(label)}`;
+
+      records.push({
+        type: normalizedType,
+        traitId,
+        label,
+        origin: normalizedOrigin,
+        kind: normalizedKind,
+        detail: detail?.trim(),
+      });
+  }
+
+  return records;
+}
+
+function parseLineage(identityMarkdown: string, soulMarkdown: string): ClawLineage | null {
+  const lineageSection = extractSection(identityMarkdown, 'Lineage');
+  const inheritanceMap = parseInheritanceMap(soulMarkdown);
+  const parentA = lineageSection?.match(/- Parent A:\s*(.+)/i)?.[1]?.trim() ?? '';
+  const parentB = lineageSection?.match(/- Parent B:\s*(.+)/i)?.[1]?.trim() ?? '';
+
+  if (!parentA && !parentB && inheritanceMap.length === 0) {
+    return null;
+  }
+
+  return {
+    parentA: parentA || 'unknown-parent-a',
+    parentB: parentB || 'unknown-parent-b',
+    inheritanceMap,
+  };
+}
+
+function parseIdentity(identityMarkdown: string, soulMarkdown: string, fallbackNameHint: string): { name: string; identity: ClawIdentity; archetype: string; intro: string; generation: number } {
   const frontmatter = parseFrontmatter(identityMarkdown);
   const stripped = stripMarkdown(identityMarkdown);
   const name =
@@ -248,6 +367,8 @@ function parseIdentity(identityMarkdown: string, soulMarkdown: string, fallbackN
     extractEmoji(identityMarkdown) ||
     extractEmoji(soulMarkdown) ||
     '🧬';
+  const introSection = sanitizeIdentityValue(extractSection(identityMarkdown, 'Intro'));
+  const parsedGeneration = Number.parseInt(frontmatter.generation ?? '', 10);
 
   return {
     name,
@@ -259,7 +380,8 @@ function parseIdentity(identityMarkdown: string, soulMarkdown: string, fallbackN
       emoji,
     },
     archetype: role,
-    intro: stripped.slice(0, 180) || directive,
+    intro: introSection || stripped.slice(0, 180) || directive,
+    generation: Number.isFinite(parsedGeneration) ? parsedGeneration : 0,
   };
 }
 
@@ -499,28 +621,32 @@ export async function parseOpenClawWorkspaceZip(zipPath: string): Promise<Parsed
 
   const fallbackNameHint = basename(zipPath).replace(/\.zip$/i, '');
   const identity = parseIdentity(identityMarkdown, soulMarkdown, fallbackNameHint);
-  const soulTraits = fallbackSoulTraits(`${identityMarkdown}\n${soulMarkdown}`);
-  const skills = fallbackSkillBadges(
+  const explicitSoulTraits = parseExplicitSoulTraits(soulMarkdown);
+  const soulTraits = explicitSoulTraits ?? fallbackSoulTraits(`${identityMarkdown}\n${soulMarkdown}`);
+  const explicitSkills = parseExplicitSkills(skillTexts);
+  const skills = explicitSkills ?? fallbackSkillBadges(
     `${identityMarkdown}\n${soulMarkdown}\n${skillTexts.map((entry) => `${entry.path}\n${entry.text}`).join('\n')}`,
     soulTraits,
   );
-  const tools = fallbackTools(`${toolsMarkdown}\n${skillTexts.map((entry) => entry.text).join('\n')}`, skills);
+  const explicitTools = parseExplicitTools(toolsMarkdown);
+  const tools = explicitTools ?? fallbackTools(`${toolsMarkdown}\n${skillTexts.map((entry) => entry.text).join('\n')}`, skills);
   const visual = buildVisual(identity.name, soulTraits, skills);
   const id = `market-${slugify(identity.name) || 'claw'}-${shortHash(`${identity.name}:${identity.identity.directive}:${identity.intro}`)}`;
   const intro = identity.intro.length > 180 ? `${identity.intro.slice(0, 177)}...` : identity.intro;
+  const lineage = parseLineage(identityMarkdown, soulMarkdown);
 
   const claw: Claw = {
     id,
     name: identity.name,
     archetype: identity.archetype,
-    generation: 0,
+    generation: identity.generation,
     identity: identity.identity,
     soul: { traits: soulTraits },
     skills: { badges: skills },
     tools: { loadout: tools },
     visual,
     intro,
-    lineage: null,
+    lineage,
   };
 
   const manifest: ClawBundleManifest = {

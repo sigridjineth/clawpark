@@ -133,7 +133,7 @@ describe('openclaw bundle parsers', () => {
         },
         skills: {
           badges: [
-            { id: 'skill-review', label: 'Review', icon: '🔍', dominance: 1, color: '#fff' },
+            { id: 'skill-review', label: 'Code Review', icon: '🔍', dominance: 1, color: '#fff' },
           ],
         },
         tools: {
@@ -172,6 +172,12 @@ describe('openclaw bundle parsers', () => {
 
       const reparsed = await parseOpenClawWorkspaceZip(zipPath);
       expect(reparsed.claw.name).toBe('Halo');
+      expect(reparsed.claw.generation).toBe(1);
+      expect(reparsed.claw.soul.traits.map((trait) => trait.label)).toContain('Analysis');
+      expect(reparsed.claw.skills.badges.map((badge) => badge.label)).toContain('Code Review');
+      expect(reparsed.claw.tools?.loadout.map((tool) => tool.label)).toContain('Search Probe');
+      expect(reparsed.claw.lineage?.parentA).toBe('spec-quartz');
+      expect(reparsed.claw.lineage?.inheritanceMap).toContainEqual(expect.objectContaining({ label: 'Analysis', origin: 'parentA' }));
       expect(reparsed.manifest.includedFiles).toContain('IDENTITY.md');
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -34,18 +34,14 @@ export function breed(request: BreedRequest): BreedResult {
     request.parentB.soul.traits,
     request.preferredTraitId,
     rng,
+    request.breedPrompt,
   );
 
   const skillResult = inheritSkillBadges(
     request.parentA.skills.badges,
     request.parentB.skills.badges,
     rng,
-  );
-
-  const toolResult = inheritToolBadges(
-    getClawTools(request.parentA).loadout,
-    getClawTools(request.parentB).loadout,
-    rng,
+    request.breedPrompt,
   );
 
   const mutationResult = attemptMutation({
@@ -56,6 +52,14 @@ export function breed(request: BreedRequest): BreedResult {
     rng,
     demoMode: request.demoMode,
   });
+
+  const toolResult = inheritToolBadges(
+    getClawTools(request.parentA).loadout,
+    getClawTools(request.parentB).loadout,
+    rng,
+    request.breedPrompt,
+    mutationResult.finalSkillBadges,
+  );
 
   const { archetype, intro: resolvedIntro } = resolveArchetype(
     mutationResult.finalSoulTraits,
