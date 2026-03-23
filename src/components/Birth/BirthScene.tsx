@@ -22,11 +22,21 @@ interface BirthSceneProps {
   phase: BirthPhase;
   onPhaseChange: (phase: BirthPhase) => void;
   onViewLineage: () => void;
-  onBreedAgain: () => void;
+  onSaveToNursery: () => void;
+  savingToNursery?: boolean;
   onBackToGallery: () => void;
 }
 
-export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineage, onBreedAgain, onBackToGallery }: BirthSceneProps) {
+export function BirthScene({
+  parents,
+  result,
+  phase,
+  onPhaseChange,
+  onViewLineage,
+  onSaveToNursery,
+  savingToNursery = false,
+  onBackToGallery,
+}: BirthSceneProps) {
   useEffect(() => {
     const timers: number[] = [];
     let elapsed = 0;
@@ -75,7 +85,9 @@ export function BirthScene({ parents, result, phase, onPhaseChange, onViewLineag
       {phase === 'complete' && (
         <div className="flex flex-wrap justify-center gap-3">
           <button type="button" onClick={onViewLineage} className="jp-btn-secondary">View Lineage</button>
-          <button type="button" onClick={onBreedAgain} className="jp-btn">Breed Again</button>
+          <button type="button" onClick={onSaveToNursery} className="jp-btn" disabled={savingToNursery}>
+            {savingToNursery ? 'Saving…' : 'Save to Nursery'}
+          </button>
           <button type="button" onClick={onBackToGallery} className="jp-btn-secondary">Nursery</button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import type { HomePayload } from '../types/home';
 import type {
   BreedingIntent,
+  BreedingProposal,
   BreedingRunRecord,
   BreedingRunResult,
   EligibilityResult,
@@ -177,6 +178,51 @@ function normalizeBreedingIntent(payload: unknown): BreedingIntent {
   };
 }
 
+function normalizeBreedingProposal(payload: unknown): BreedingProposal {
+  const data = payload as {
+    id?: string;
+    proposalId?: string;
+    parent_a_id?: string;
+    parentAId?: string;
+    parent_b_id?: string;
+    parentBId?: string;
+    requester_id?: string;
+    requesterId?: string;
+    consent_status?: BreedingProposal['consentStatus'];
+    consentStatus?: BreedingProposal['consentStatus'];
+    intent_id?: string | null;
+    intentId?: string | null;
+    owner_relationship?: string;
+    ownerRelationship?: string;
+    consent_required?: number | boolean;
+    consentRequired?: number | boolean;
+    consent_id?: string | null;
+    consentId?: string | null;
+    created_at?: string;
+    createdAt?: string;
+    updated_at?: string;
+    updatedAt?: string;
+  };
+
+  return {
+    proposalId: requireString(data.proposalId ?? data.id, 'proposal.id'),
+    parentAId: requireString(data.parentAId ?? data.parent_a_id, 'proposal.parent_a_id'),
+    parentBId: requireString(data.parentBId ?? data.parent_b_id, 'proposal.parent_b_id'),
+    requesterId: requireString(data.requesterId ?? data.requester_id, 'proposal.requester_id'),
+    consentStatus: data.consentStatus ?? data.consent_status ?? 'pending',
+    intentId: data.intentId ?? data.intent_id ?? null,
+    ownerRelationship: String(data.ownerRelationship ?? data.owner_relationship ?? 'unknown-owner'),
+    consentRequired: typeof data.consentRequired === 'boolean'
+      ? data.consentRequired
+      : typeof data.consent_required === 'number'
+        ? data.consent_required === 1
+        : Boolean(data.consent_required),
+    consentId: data.consentId ?? data.consent_id ?? null,
+    createdAt: requireString(data.createdAt ?? data.created_at, 'proposal.created_at'),
+    updatedAt: requireString(data.updatedAt ?? data.updated_at ?? data.createdAt ?? data.created_at, 'proposal.updated_at'),
+  };
+}
+
 function normalizeEligibilityResult(payload: unknown): EligibilityResult {
   const data = payload as {
     eligible: boolean;
@@ -196,6 +242,66 @@ function normalizeEligibilityResult(payload: unknown): EligibilityResult {
     eligible: true,
     parentA: normalizeSpecimen(data.parentA),
     parentB: normalizeSpecimen(data.parentB),
+  };
+}
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`API contract error: missing ${field}`);
+  }
+  return value;
+}
+
+function normalizeBreedingRunResult(payload: unknown): BreedingRunResult {
+  const data = payload as {
+    runId?: unknown;
+    status?: unknown;
+    child?: unknown;
+    inheritanceMap?: unknown;
+    mutationOccurred?: unknown;
+  };
+
+  const runId = requireString(data.runId, 'runId');
+  const status = data.status === 'complete' ? 'complete' : 'complete';
+
+  return {
+    runId,
+    status,
+    child: data.child ? normalizeSpecimen(data.child) : null,
+    inheritanceMap: Array.isArray(data.inheritanceMap)
+      ? (data.inheritanceMap as BreedingRunResult['inheritanceMap'])
+      : [],
+    mutationOccurred: Boolean(data.mutationOccurred),
+  };
+}
+
+function normalizeSavedBreedingRun(payload: unknown): BreedingRunRecord & { saved: boolean; child: Specimen | null } {
+  const data = payload as {
+    id?: unknown;
+    parent_a_id?: unknown;
+    parent_b_id?: unknown;
+    prompt?: unknown;
+    conversation_json?: unknown;
+    prediction_json?: unknown;
+    result_child_id?: unknown;
+    status?: unknown;
+    created_at?: unknown;
+    saved?: unknown;
+    child?: unknown;
+  };
+
+  return {
+    id: requireString(data.id, 'id'),
+    parentAId: requireString(data.parent_a_id, 'parent_a_id'),
+    parentBId: requireString(data.parent_b_id, 'parent_b_id'),
+    prompt: typeof data.prompt === 'string' ? data.prompt : null,
+    conversationJson: typeof data.conversation_json === 'string' ? data.conversation_json : null,
+    predictionJson: typeof data.prediction_json === 'string' ? data.prediction_json : null,
+    resultChildId: typeof data.result_child_id === 'string' ? data.result_child_id : null,
+    status: typeof data.status === 'string' ? data.status : 'complete',
+    createdAt: requireString(data.created_at, 'created_at'),
+    saved: Boolean(data.saved),
+    child: data.child ? normalizeSpecimen(data.child) : null,
   };
 }
 
@@ -281,24 +387,12 @@ export async function createBreedingRun(
   parentB: string,
   prompt?: string,
 ): Promise<BreedingRunResult> {
-  const payload = await request<{
-    runId: string;
-    status: 'complete';
-    child: unknown;
-    inheritanceMap: BreedingRunResult['inheritanceMap'];
-    mutationOccurred: boolean;
-  }>('/breeding/runs', {
+  const payload = await request<unknown>('/breeding/runs', {
     method: 'POST',
     body: JSON.stringify({ parentA, parentB, prompt }),
   });
 
-  return {
-    runId: payload.runId,
-    status: payload.status,
-    child: payload.child ? normalizeSpecimen(payload.child) : null,
-    inheritanceMap: payload.inheritanceMap,
-    mutationOccurred: payload.mutationOccurred,
-  };
+  return normalizeBreedingRunResult(payload);
 }
 
 export async function getBreedingRun(runId: string): Promise<BreedingRunRecord> {
@@ -328,33 +422,8 @@ export async function getBreedingRun(runId: string): Promise<BreedingRunRecord> 
 }
 
 export async function saveBreedingRun(runId: string): Promise<BreedingRunRecord & { saved: boolean; child: Specimen | null }> {
-  const payload = await request<{
-    id: string;
-    parent_a_id: string;
-    parent_b_id: string;
-    prompt: string | null;
-    conversation_json: string | null;
-    prediction_json: string | null;
-    result_child_id: string | null;
-    status: string;
-    created_at: string;
-    saved: number;
-    child: unknown;
-  }>(`/breeding/runs/${runId}/save`, { method: 'POST' });
-
-  return {
-    id: payload.id,
-    parentAId: payload.parent_a_id,
-    parentBId: payload.parent_b_id,
-    prompt: payload.prompt,
-    conversationJson: payload.conversation_json,
-    predictionJson: payload.prediction_json,
-    resultChildId: payload.result_child_id,
-    status: payload.status,
-    createdAt: payload.created_at,
-    saved: Boolean(payload.saved),
-    child: payload.child ? normalizeSpecimen(payload.child) : null,
-  };
+  const payload = await request<unknown>(`/breeding/runs/${runId}/save`, { method: 'POST' });
+  return normalizeSavedBreedingRun(payload);
 }
 
 export async function getLineage(id: string): Promise<LineageTree> {
@@ -365,13 +434,48 @@ export async function getLineage(id: string): Promise<LineageTree> {
 export async function createIntent(
   sourceMessage: string,
   targetSpecimenIds?: string[],
+  options?: {
+    requesterIdentity?: string;
+    sourceSurface?: 'web_ui' | 'discord_bot' | 'discord_claw' | string;
+  },
 ): Promise<BreedingIntent> {
   const payload = await request<unknown>('/discord/intents', {
     method: 'POST',
     body: JSON.stringify({
       source_message: sourceMessage,
+      requester_identity: options?.requesterIdentity,
       target_specimen_ids: targetSpecimenIds,
+      source_surface: options?.sourceSurface,
     }),
   });
   return normalizeBreedingIntent(payload);
+}
+
+export async function getIntent(intentId: string): Promise<BreedingIntent> {
+  const payload = await request<unknown>(`/discord/intents/${encodeURIComponent(intentId)}`);
+  return normalizeBreedingIntent(payload);
+}
+
+export async function createBreedingProposal(params: {
+  parentAId: string;
+  parentBId: string;
+  requesterId?: string;
+  intentId?: string;
+}): Promise<BreedingProposal> {
+  const payload = await request<unknown>('/breeding/proposals', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return normalizeBreedingProposal(payload);
+}
+
+export async function respondToBreedingProposalConsent(
+  proposalId: string,
+  status: 'approved' | 'rejected',
+): Promise<BreedingProposal> {
+  const payload = await request<unknown>(`/breeding/proposals/${encodeURIComponent(proposalId)}/consent`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
+  return normalizeBreedingProposal(payload);
 }

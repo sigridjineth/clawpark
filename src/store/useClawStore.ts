@@ -6,8 +6,12 @@ import { predictBreed } from '../engine/predict';
 import * as api from '../services/clawparkApi';
 import type { HomePayload } from '../types/home';
 import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
-import type { ImportPreview, Specimen } from '../types/specimen';
+import type { BreedingRunResult, ImportPreview, Specimen } from '../types/specimen';
 import { DEMO_PARENT_IDS } from '../utils/demoMode';
+
+const DEFAULT_BREED_PROMPT = 'Tell me what kind of child should survive this hatch.';
+
+type BreedingMode = 'api' | 'local_fallback' | null;
 
 interface ClawStore {
   // Server state
@@ -32,11 +36,17 @@ interface ClawStore {
   computePrediction: () => void;
 
   breedResult: BreedResult | null;
+  activeBreedingRunId: string | null;
+  breedingPending: boolean;
+  savePending: boolean;
+  lastBreedingMode: BreedingMode;
+  breedingStatusMessage: string | null;
+  clearBreedingStatus: () => void;
   setBreedResult: (result: BreedResult | null) => void;
-  breedSelected: () => void;
-  beginBreeding: () => void;
+  breedSelected: () => Promise<void>;
+  beginBreeding: () => Promise<void>;
   addChildToGallery: () => void;
-  persistChildToGallery: () => void;
+  persistChildToGallery: () => Promise<void>;
   resetFlow: () => void;
 
   birthPhase: BirthPhase;
@@ -78,13 +88,89 @@ export function createInitialStoreState() {
     selectedIds: [] as string[],
     prediction: null as BreedPrediction | null,
     preferredTraitId: null as string | null,
-    breedPrompt: 'Tell me what kind of child should survive this hatch.',
+    breedPrompt: DEFAULT_BREED_PROMPT,
     breedingConversation: [] as ConversationTurn[],
     breedResult: null as BreedResult | null,
+    activeBreedingRunId: null as string | null,
+    breedingPending: false,
+    savePending: false,
+    lastBreedingMode: null as BreedingMode,
+    breedingStatusMessage: null as string | null,
     birthPhase: 'merge' as BirthPhase,
     screen: 'home' as Screen,
     breedCount: 0,
     demoMode: false,
+  };
+}
+
+function isApiUnavailableError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  if (
+    message.includes('failed to fetch')
+    || message.includes('fetch failed')
+    || message.includes('networkerror')
+    || message.includes('load failed')
+  ) {
+    return true;
+  }
+
+  const statusMatch = error.message.match(/API\s+(\d{3})/i);
+  if (!statusMatch) return false;
+  const status = Number(statusMatch[1]);
+  return status >= 500;
+}
+
+function toBreedResultFromApi(run: BreedingRunResult): BreedResult | null {
+  if (!run.child) return null;
+  return {
+    child: run.child.claw,
+    inheritanceMap: run.inheritanceMap,
+    mutationOccurred: run.mutationOccurred,
+    eliminatedSoulIds: [],
+    eliminatedSkillIds: [],
+    eliminatedToolIds: [],
+  };
+}
+
+function buildStateAfterPersist(
+  state: Pick<
+    ClawStore,
+    | 'claws'
+    | 'specimens'
+    | 'demoMode'
+    | 'selectedIds'
+    | 'breedCount'
+  >,
+  child: Claw,
+  specimen?: Specimen,
+) {
+  const preserveDemoSelection = state.demoMode;
+  const clawExists = state.claws.some((claw) => claw.id === child.id);
+  const nextClaws = clawExists ? state.claws : [child, ...state.claws];
+
+  let nextSpecimens = state.specimens;
+  if (specimen) {
+    nextSpecimens = state.specimens.some((entry) => entry.id === specimen.id)
+      ? state.specimens.map((entry) => (entry.id === specimen.id ? specimen : entry))
+      : [specimen, ...state.specimens];
+  }
+
+  return {
+    claws: nextClaws,
+    specimens: nextSpecimens,
+    selectedIds: preserveDemoSelection ? [...DEMO_PARENT_IDS] : [],
+    preferredTraitId: null,
+    breedPrompt: DEFAULT_BREED_PROMPT,
+    breedingConversation: [],
+    prediction: null,
+    screen: 'nursery' as Screen,
+    birthPhase: 'merge' as BirthPhase,
+    breedResult: null as BreedResult | null,
+    activeBreedingRunId: null as string | null,
+    lastBreedingMode: null as BreedingMode,
   };
 }
 
@@ -160,72 +246,150 @@ export const useClawStore = create<ClawStore>((set, get) => ({
     });
   },
 
+  clearBreedingStatus: () => set({ breedingStatusMessage: null }),
+
   setBreedResult: (result) => set({ breedResult: result }),
 
-  breedSelected: () => {
+  breedSelected: async () => {
     const state = get();
+    if (state.breedingPending) return;
     const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
     if (selectedClaws.length !== 2) return;
 
-    const result = breed({
-      parentA: selectedClaws[0],
-      parentB: selectedClaws[1],
-      preferredTraitId: state.preferredTraitId ?? undefined,
-      breedCount: state.breedCount,
-      breedPrompt: state.breedPrompt,
-      breedingConversation: state.breedingConversation,
-      demoMode: state.demoMode,
-      seed: Date.now() + state.breedCount,
-    });
+    set({ breedingPending: true, breedingStatusMessage: null });
 
-    set((current) => ({
-      breedResult: result,
-      screen: 'birth',
-      birthPhase: 'merge',
-      breedCount: current.breedCount + 1,
-    }));
+    const fallbackToLocalBreeding = () => {
+      const latestState = get();
+      const latestSelectedClaws = getSelectedClaws(latestState.claws, latestState.selectedIds);
+      if (latestSelectedClaws.length !== 2) {
+        return;
+      }
+
+      const localResult = breed({
+        parentA: latestSelectedClaws[0],
+        parentB: latestSelectedClaws[1],
+        preferredTraitId: latestState.preferredTraitId ?? undefined,
+        breedCount: latestState.breedCount,
+        breedPrompt: latestState.breedPrompt,
+        breedingConversation: latestState.breedingConversation,
+        demoMode: latestState.demoMode,
+        seed: Date.now() + latestState.breedCount,
+      });
+
+      set((current) => ({
+        breedResult: localResult,
+        screen: 'birth',
+        birthPhase: 'merge',
+        breedCount: current.breedCount + 1,
+        activeBreedingRunId: null,
+        lastBreedingMode: 'local_fallback',
+        breedingStatusMessage: 'API unavailable, used local simulation.',
+      }));
+    };
+
+    try {
+      const eligibility = await api.checkEligibility(selectedClaws[0].id, selectedClaws[1].id);
+      if (!eligibility.eligible) {
+        set({
+          breedingStatusMessage: eligibility.reason ?? 'Selected pair is not eligible for breeding.',
+        });
+        return;
+      }
+
+      const run = await api.createBreedingRun(
+        selectedClaws[0].id,
+        selectedClaws[1].id,
+        state.breedPrompt,
+      );
+      const apiResult = toBreedResultFromApi(run);
+      if (!apiResult) {
+        throw new Error('Breeding run completed without a child payload.');
+      }
+
+      set((current) => ({
+        breedResult: apiResult,
+        screen: 'birth',
+        birthPhase: 'merge',
+        breedCount: current.breedCount + 1,
+        activeBreedingRunId: run.runId,
+        lastBreedingMode: 'api',
+      }));
+    } catch (error) {
+      if (isApiUnavailableError(error)) {
+        fallbackToLocalBreeding();
+        return;
+      }
+      set({
+        breedingStatusMessage: error instanceof Error ? error.message : 'Failed to run breeding.',
+      });
+    } finally {
+      set({ breedingPending: false });
+    }
   },
 
-  beginBreeding: () => {
-    get().breedSelected();
+  beginBreeding: async () => {
+    await get().breedSelected();
   },
 
   addChildToGallery: () => {
     const result = get().breedResult;
     if (!result) return;
     const preserveDemoSelection = get().demoMode;
-
-    set((state) => {
-      const exists = state.claws.some((claw) => claw.id === result.child.id);
-      const nextClaws = exists ? state.claws : [result.child, ...state.claws];
-      return {
-        claws: nextClaws,
-        selectedIds: preserveDemoSelection ? [...DEMO_PARENT_IDS] : [],
-        preferredTraitId: null,
-        breedPrompt: 'Tell me what kind of child should survive this hatch.',
-        breedingConversation: [],
-        prediction: null,
-        screen: 'nursery' as Screen,
-        birthPhase: 'merge' as BirthPhase,
-      };
-    });
+    set((current) => buildStateAfterPersist(current, result.child));
 
     if (preserveDemoSelection) {
       get().computePrediction();
     }
   },
 
-  persistChildToGallery: () => {
-    get().addChildToGallery();
+  persistChildToGallery: async () => {
+    const state = get();
+    if (state.savePending) return;
+    if (!state.breedResult) return;
+
+    const preserveDemoSelection = state.demoMode;
+    set({ savePending: true, breedingStatusMessage: null });
+
+    try {
+      if (state.lastBreedingMode === 'api' && state.activeBreedingRunId) {
+        const saved = await api.saveBreedingRun(state.activeBreedingRunId);
+        const childClaw = saved.child?.claw ?? state.breedResult.child;
+        if (!childClaw) {
+          throw new Error('Breeding save completed without child payload.');
+        }
+
+        set((current) => buildStateAfterPersist(current, childClaw, saved.child ?? undefined));
+        await Promise.all([get().fetchSpecimens(), get().fetchHome()]);
+      } else {
+        set((current) => buildStateAfterPersist(current, state.breedResult!.child));
+        await Promise.all([get().fetchSpecimens(), get().fetchHome()]);
+      }
+    } catch (error) {
+      set({
+        breedingStatusMessage: error instanceof Error ? error.message : 'Failed to save child to nursery.',
+      });
+      return;
+    } finally {
+      set({ savePending: false });
+    }
+
+    if (preserveDemoSelection) {
+      get().computePrediction();
+    }
   },
 
   resetFlow: () => {
     set({
       breedResult: null,
+      activeBreedingRunId: null,
+      lastBreedingMode: null,
+      breedingPending: false,
+      savePending: false,
+      breedingStatusMessage: null,
       birthPhase: 'merge',
       screen: 'nursery',
       preferredTraitId: null,
-      breedPrompt: 'Tell me what kind of child should survive this hatch.',
+      breedPrompt: DEFAULT_BREED_PROMPT,
       breedingConversation: [],
       prediction: null,
     });
@@ -239,6 +403,9 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       selectedIds: [...DEMO_PARENT_IDS],
       preferredTraitId: null,
       breedResult: null,
+      activeBreedingRunId: null,
+      lastBreedingMode: null,
+      breedingStatusMessage: null,
       birthPhase: 'merge',
       screen: 'nursery',
     });

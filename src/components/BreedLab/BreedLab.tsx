@@ -15,6 +15,7 @@ interface BreedLabProps {
   onPreferredTrait: (traitId: string | null) => void;
   onBack: () => void;
   onBreed: () => void;
+  breedingPending: boolean;
   prediction: NonNullable<import('../../types/claw').BreedPrediction>;
 }
 
@@ -28,6 +29,7 @@ export function BreedLab({
   onPreferredTrait,
   onBack,
   onBreed,
+  breedingPending,
   prediction,
 }: BreedLabProps) {
   const traitPool = Array.from(
@@ -124,7 +126,7 @@ export function BreedLab({
       </div>
 
       <div className="flex justify-center pt-2">
-        <BreedButton onClick={onBreed} />
+        <BreedButton onClick={onBreed} disabled={breedingPending} />
       </div>
     </section>
   );

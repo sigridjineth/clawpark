@@ -154,11 +154,15 @@ function App() {
     setBreedPrompt,
     generateParentConversation,
     setPreferredTrait,
-    breedSelected,
+    beginBreeding,
     breedResult,
-    addChildToGallery,
+    persistChildToGallery,
     birthPhase,
     setBirthPhase,
+    breedingPending,
+    savePending,
+    breedingStatusMessage,
+    clearBreedingStatus,
     homePayload,
     importPreviews,
     fetchHome,
@@ -343,7 +347,10 @@ function App() {
                   onTalkToParents={generateParentConversation}
                   onPreferredTrait={setPreferredTrait}
                   onBack={() => setScreen('nursery')}
-                  onBreed={breedSelected}
+                  onBreed={() => {
+                    void beginBreeding();
+                  }}
+                  breedingPending={breedingPending}
                   prediction={prediction}
                 />
               </motion.div>
@@ -363,7 +370,10 @@ function App() {
                   phase={birthPhase}
                   onPhaseChange={setBirthPhase}
                   onViewLineage={() => setScreen('lineage')}
-                  onBreedAgain={addChildToGallery}
+                  onSaveToNursery={() => {
+                    void persistChildToGallery();
+                  }}
+                  savingToNursery={savePending}
                   onBackToGallery={() => setScreen('nursery')}
                 />
               </motion.div>
@@ -388,8 +398,15 @@ function App() {
                       >
                         Back
                       </button>
-                      <button type="button" onClick={addChildToGallery} className="jp-btn">
-                        Save to nursery
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void persistChildToGallery();
+                        }}
+                        className="jp-btn"
+                        disabled={savePending}
+                      >
+                        {savePending ? 'Saving…' : 'Save to nursery'}
                       </button>
                     </div>
                   </div>
@@ -398,6 +415,18 @@ function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          {breedingStatusMessage && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-4 flex items-center justify-between gap-3 rounded-[10px] border border-white/15 bg-white/5 px-4 py-3 font-mono text-xs text-[var(--openclaw-muted)]"
+            >
+              <span>{breedingStatusMessage}</span>
+              <button type="button" onClick={clearBreedingStatus} className="jp-btn-secondary text-[10px]">
+                Dismiss
+              </button>
+            </div>
+          )}
         </main>
       </div>
 

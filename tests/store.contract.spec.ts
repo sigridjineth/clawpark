@@ -16,15 +16,15 @@ describe("ClawPark store contracts", () => {
       preferredTraitId: null,
       breedResult: null,
       birthPhase: "merge",
-      screen: "gallery",
+      screen: "nursery",
       demoMode: true,
       breedCount: 0,
     });
   });
 
-  it("adds the bred child back into the gallery", () => {
+  it("adds the bred child back into the gallery", async () => {
     const beforeCount = useClawStore.getState().claws.length;
-    useClawStore.getState().breedSelected();
+    await useClawStore.getState().breedSelected();
 
     const result = useClawStore.getState().breedResult;
 

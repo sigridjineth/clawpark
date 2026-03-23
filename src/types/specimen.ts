@@ -92,3 +92,19 @@ export interface BreedingIntent {
   createdAt: string;
   updatedAt: string;
 }
+
+export type BreedingProposalConsentStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'auto_approved';
+
+export interface BreedingProposal {
+  proposalId: string;
+  parentAId: string;
+  parentBId: string;
+  requesterId: string;
+  consentStatus: BreedingProposalConsentStatus;
+  intentId: string | null;
+  ownerRelationship: string;
+  consentRequired: boolean;
+  consentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
