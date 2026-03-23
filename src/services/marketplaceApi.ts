@@ -123,6 +123,48 @@ export async function publishMarketplaceDraft(draftId: string): Promise<Marketpl
   return parseJson<MarketplaceListing>(response);
 }
 
+export async function createUnsignedClawListing(payload: {
+  bundle: File;
+  publisherLabel: string;
+  title?: string;
+  summary?: string;
+}): Promise<MarketplaceListing> {
+  const body = new FormData();
+  body.append('bundle', payload.bundle);
+  body.append('publisherLabel', payload.publisherLabel);
+  if (payload.title) body.append('title', payload.title);
+  if (payload.summary) body.append('summary', payload.summary);
+
+  const response = await fetch('/api/marketplace/ingest/claw', {
+    method: 'POST',
+    body,
+    credentials: 'include',
+  });
+
+  return parseJson<MarketplaceListing>(response);
+}
+
+export async function createUnsignedSkillListing(payload: {
+  bundle: File;
+  publisherLabel: string;
+  title?: string;
+  summary?: string;
+}): Promise<MarketplaceListing> {
+  const body = new FormData();
+  body.append('bundle', payload.bundle);
+  body.append('publisherLabel', payload.publisherLabel);
+  if (payload.title) body.append('title', payload.title);
+  if (payload.summary) body.append('summary', payload.summary);
+
+  const response = await fetch('/api/marketplace/ingest/skill', {
+    method: 'POST',
+    body,
+    credentials: 'include',
+  });
+
+  return parseJson<MarketplaceListing>(response);
+}
+
 export async function downloadMarketplaceBundle(slug: string): Promise<ClawBundle> {
   const response = await fetch(`/api/marketplace/listings/${slug}/bundle`, {
     credentials: 'include',

@@ -9,6 +9,8 @@ import {
 } from '../../engine/openclaw';
 import {
   createMarketplaceDraft,
+  createUnsignedClawListing,
+  createUnsignedSkillListing,
   createMockMarketplaceListing,
   delistMockMarketplaceListing,
   downloadMarketplaceArtifact,
@@ -139,6 +141,8 @@ function buildPurchaseReceipt(receipt: MockPurchaseResponse): MarketplaceReceipt
 
 export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: MarketplaceProps) {
   const uploadRef = useRef<HTMLInputElement>(null);
+  const unsignedClawRef = useRef<HTMLInputElement>(null);
+  const unsignedSkillRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const galleryClawIds = useMemo(() => new Set(ownedClaws.map((claw) => claw.id)), [ownedClaws]);
 
@@ -163,6 +167,9 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
   const [draft, setDraft] = useState<MarketplaceDraft | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftSummary, setDraftSummary] = useState('');
+  const [unsignedPublisherLabel, setUnsignedPublisherLabel] = useState('Local Moltbot Publisher');
+  const [unsignedTitle, setUnsignedTitle] = useState('');
+  const [unsignedSummary, setUnsignedSummary] = useState('');
   const [toolsVisibility, setToolsVisibility] = useState<'full' | 'summary'>('full');
   const [coverStyle, setCoverStyle] = useState<'avatar' | 'containment-card'>('avatar');
   const [busy, setBusy] = useState(false);
@@ -419,6 +426,36 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
       setStatusMessage(error instanceof Error ? error.message : 'Failed to publish draft.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleUnsignedIngest = async (kind: 'claw' | 'skill', file: File) => {
+    setBusy(true);
+    try {
+      const listing = kind === 'claw'
+        ? await createUnsignedClawListing({
+          bundle: file,
+          publisherLabel: unsignedPublisherLabel,
+          title: unsignedTitle || undefined,
+          summary: unsignedSummary || undefined,
+        })
+        : await createUnsignedSkillListing({
+          bundle: file,
+          publisherLabel: unsignedPublisherLabel,
+          title: unsignedTitle || undefined,
+          summary: unsignedSummary || undefined,
+        });
+
+      setListings((current) => [listing, ...current.filter((item) => item.slug !== listing.slug)]);
+      setTab('browse');
+      setBrowseKind(kind);
+      setStatusMessage(`Published unsigned ${kind} listing: ${listing.title}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : `Failed to ingest unsigned ${kind} bundle.`);
+    } finally {
+      setBusy(false);
+      if (unsignedClawRef.current) unsignedClawRef.current.value = '';
+      if (unsignedSkillRef.current) unsignedSkillRef.current.value = '';
     }
   };
 
@@ -1341,11 +1378,82 @@ export function Marketplace({ ownedClaws, onClaim, onImport, onBack }: Marketpla
 
           <section className="jp-card space-y-4 p-5">
             <div>
-              <div className="jp-label">Local skill bridge</div>
-              <h3 className="mt-2 font-display text-3xl text-bone">Moltbot-style publish</h3>
+              <div className="jp-label">Scenario 4</div>
+              <h3 className="mt-2 font-display text-3xl text-bone">Unsigned ingest publish</h3>
               <p className="mt-2 text-sm text-bone-muted">
-                Install the publisher skill into your real OpenClaw workspace. It can upload either the current claw workspace or a standalone skill folder directly into the marketplace as an unverified listing.
+                Upload a claw workspace ZIP or a skill ZIP without Discord auth. These produce immutable, unsigned public listings.
               </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-bone-muted">
+                Publisher label
+                <input
+                  value={unsignedPublisherLabel}
+                  onChange={(event) => setUnsignedPublisherLabel(event.target.value)}
+                  className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-bone outline-none transition focus:border-amber/40"
+                />
+              </label>
+              <label className="block text-sm text-bone-muted">
+                Optional title override
+                <input
+                  value={unsignedTitle}
+                  onChange={(event) => setUnsignedTitle(event.target.value)}
+                  className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-bone outline-none transition focus:border-amber/40"
+                />
+              </label>
+            </div>
+
+            <label className="block text-sm text-bone-muted">
+              Optional summary override
+              <textarea
+                value={unsignedSummary}
+                onChange={(event) => setUnsignedSummary(event.target.value)}
+                rows={3}
+                className="mt-2 w-full rounded-md border border-jungle-700 bg-jungle-900 px-3 py-2 text-bone outline-none transition focus:border-amber/40"
+              />
+            </label>
+
+            <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
+              <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Unsigned claw ingest</div>
+              <p className="mt-2 text-xs text-bone-dim">Matches <code>POST /api/marketplace/ingest/claw</code></p>
+              <div className="mt-3">
+                <button type="button" onClick={() => unsignedClawRef.current?.click()} className="jp-btn" disabled={busy}>
+                  <Upload className="h-4 w-4" />
+                  Upload claw ZIP
+                </button>
+                <input
+                  ref={unsignedClawRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleUnsignedIngest('claw', file);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">
+              <div className="text-xs uppercase tracking-[0.35em] text-bone-muted">Unsigned skill ingest</div>
+              <p className="mt-2 text-xs text-bone-dim">Matches <code>POST /api/marketplace/ingest/skill</code></p>
+              <div className="mt-3">
+                <button type="button" onClick={() => unsignedSkillRef.current?.click()} className="jp-btn" disabled={busy}>
+                  <Upload className="h-4 w-4" />
+                  Upload skill ZIP
+                </button>
+                <input
+                  ref={unsignedSkillRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleUnsignedIngest('skill', file);
+                  }}
+                />
+              </div>
             </div>
 
             <div className="rounded-lg border border-jungle-700 bg-jungle-900/70 p-4 text-sm text-bone-dim">

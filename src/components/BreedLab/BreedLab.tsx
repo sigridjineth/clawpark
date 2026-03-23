@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { buildFusionHint } from '../../engine/openclaw';
 import type { Claw } from '../../types/claw';
+import type { BreedingIntent, BreedingProposal } from '../../types/specimen';
 import { BreedButton } from './BreedButton';
 import { ParentSlot } from './ParentSlot';
 import { PredictionPanel } from './PredictionPanel';
@@ -15,7 +16,13 @@ interface BreedLabProps {
   onPreferredTrait: (traitId: string | null) => void;
   onBack: () => void;
   onBreed: () => void;
+  onCreateIntent: (sourceMessage: string) => void;
+  onCreateProposal: () => void;
+  onRespondConsent: (status: 'approved' | 'rejected') => void;
   breedingPending: boolean;
+  intentPending: boolean;
+  breedingIntent: BreedingIntent | null;
+  breedingProposal: BreedingProposal | null;
   prediction: NonNullable<import('../../types/claw').BreedPrediction>;
 }
 
@@ -29,7 +36,13 @@ export function BreedLab({
   onPreferredTrait,
   onBack,
   onBreed,
+  onCreateIntent,
+  onCreateProposal,
+  onRespondConsent,
   breedingPending,
+  intentPending,
+  breedingIntent,
+  breedingProposal,
   prediction,
 }: BreedLabProps) {
   const traitPool = Array.from(
@@ -122,6 +135,62 @@ export function BreedLab({
               {trait.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Scenario 2: intent/proposal/consent flow */}
+      <div className="jp-card p-4">
+        <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.28em] text-fern">Scenario 2 flow</div>
+        <p className="text-sm text-bone-dim">
+          Create a Discord/web breeding intent, convert it to a proposal, then optionally post a consent decision.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onCreateIntent(breedPrompt)}
+            className="jp-btn-secondary"
+            disabled={intentPending}
+          >
+            {intentPending ? 'Working…' : 'Create Intent'}
+          </button>
+          <button
+            type="button"
+            onClick={onCreateProposal}
+            className="jp-btn-secondary"
+            disabled={intentPending}
+          >
+            Create Proposal
+          </button>
+          <button
+            type="button"
+            onClick={() => onRespondConsent('approved')}
+            className="jp-btn-secondary"
+            disabled={intentPending || !breedingProposal}
+          >
+            Consent Approve
+          </button>
+          <button
+            type="button"
+            onClick={() => onRespondConsent('rejected')}
+            className="jp-btn-secondary"
+            disabled={intentPending || !breedingProposal}
+          >
+            Consent Reject
+          </button>
+        </div>
+
+        <div className="mt-3 grid gap-2 text-xs text-bone-dim sm:grid-cols-2">
+          <div className="rounded-md border border-jungle-700 bg-jungle-950 px-3 py-2">
+            <div className="jp-label">Intent</div>
+            <div className="mt-1 break-all text-bone">{breedingIntent?.intentId ?? '—'}</div>
+            <div className="mt-1">Status: {breedingIntent?.status ?? '—'}</div>
+          </div>
+          <div className="rounded-md border border-jungle-700 bg-jungle-950 px-3 py-2">
+            <div className="jp-label">Proposal</div>
+            <div className="mt-1 break-all text-bone">{breedingProposal?.proposalId ?? '—'}</div>
+            <div className="mt-1">Consent: {breedingProposal?.consentStatus ?? '—'}</div>
+          </div>
         </div>
       </div>
 

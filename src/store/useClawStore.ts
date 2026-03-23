@@ -6,7 +6,7 @@ import { predictBreed } from '../engine/predict';
 import * as api from '../services/clawparkApi';
 import type { HomePayload } from '../types/home';
 import type { BreedPrediction, BreedResult, BirthPhase, Claw, ConversationTurn, Screen } from '../types/claw';
-import type { BreedingRunResult, ImportPreview, Specimen } from '../types/specimen';
+import type { BreedingIntent, BreedingProposal, BreedingRunResult, ImportPreview, Specimen } from '../types/specimen';
 import { DEMO_PARENT_IDS } from '../utils/demoMode';
 
 const DEFAULT_BREED_PROMPT = 'Tell me what kind of child should survive this hatch.';
@@ -41,10 +41,16 @@ interface ClawStore {
   savePending: boolean;
   lastBreedingMode: BreedingMode;
   breedingStatusMessage: string | null;
+  breedingIntent: BreedingIntent | null;
+  breedingProposal: BreedingProposal | null;
+  breedingIntentPending: boolean;
   clearBreedingStatus: () => void;
   setBreedResult: (result: BreedResult | null) => void;
   breedSelected: () => Promise<void>;
   beginBreeding: () => Promise<void>;
+  createBreedingIntent: (sourceMessage: string) => Promise<void>;
+  createBreedingProposal: () => Promise<void>;
+  respondBreedingProposalConsent: (status: 'approved' | 'rejected') => Promise<void>;
   addChildToGallery: () => void;
   persistChildToGallery: () => Promise<void>;
   resetFlow: () => void;
@@ -96,6 +102,9 @@ export function createInitialStoreState() {
     savePending: false,
     lastBreedingMode: null as BreedingMode,
     breedingStatusMessage: null as string | null,
+    breedingIntent: null as BreedingIntent | null,
+    breedingProposal: null as BreedingProposal | null,
+    breedingIntentPending: false,
     birthPhase: 'merge' as BirthPhase,
     screen: 'home' as Screen,
     breedCount: 0,
@@ -331,6 +340,88 @@ export const useClawStore = create<ClawStore>((set, get) => ({
     await get().breedSelected();
   },
 
+  createBreedingIntent: async (sourceMessage) => {
+    const state = get();
+    if (state.breedingIntentPending) return;
+    const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
+    if (selectedClaws.length !== 2) {
+      set({ breedingStatusMessage: 'Select two parents first.' });
+      return;
+    }
+
+    set({ breedingIntentPending: true, breedingStatusMessage: null });
+    try {
+      const intent = await api.createIntent(sourceMessage || state.breedPrompt, [selectedClaws[0].id, selectedClaws[1].id], {
+        requesterIdentity: state.homePayload?.connected_identity?.discordUserId ?? undefined,
+        sourceSurface: 'web_ui',
+      });
+      set({
+        breedingIntent: intent,
+        breedingStatusMessage: `Intent ${intent.intentId} created.`,
+      });
+    } catch (error) {
+      set({
+        breedingStatusMessage: error instanceof Error ? error.message : 'Failed to create breeding intent.',
+      });
+    } finally {
+      set({ breedingIntentPending: false });
+    }
+  },
+
+  createBreedingProposal: async () => {
+    const state = get();
+    if (state.breedingIntentPending) return;
+    const selectedClaws = getSelectedClaws(state.claws, state.selectedIds);
+    if (selectedClaws.length !== 2) {
+      set({ breedingStatusMessage: 'Select two parents first.' });
+      return;
+    }
+
+    set({ breedingIntentPending: true, breedingStatusMessage: null });
+    try {
+      const proposal = await api.createBreedingProposal({
+        parentAId: selectedClaws[0].id,
+        parentBId: selectedClaws[1].id,
+        requesterId: state.homePayload?.connected_identity?.discordUserId ?? undefined,
+        intentId: state.breedingIntent?.intentId,
+      });
+      set({
+        breedingProposal: proposal,
+        breedingStatusMessage: `Proposal ${proposal.proposalId} created (${proposal.consentStatus}).`,
+      });
+    } catch (error) {
+      set({
+        breedingStatusMessage: error instanceof Error ? error.message : 'Failed to create breeding proposal.',
+      });
+    } finally {
+      set({ breedingIntentPending: false });
+    }
+  },
+
+  respondBreedingProposalConsent: async (status) => {
+    const state = get();
+    if (state.breedingIntentPending) return;
+    if (!state.breedingProposal?.proposalId) {
+      set({ breedingStatusMessage: 'Create a breeding proposal first.' });
+      return;
+    }
+
+    set({ breedingIntentPending: true, breedingStatusMessage: null });
+    try {
+      const updated = await api.respondToBreedingProposalConsent(state.breedingProposal.proposalId, status);
+      set({
+        breedingProposal: updated,
+        breedingStatusMessage: `Proposal consent is now ${updated.consentStatus}.`,
+      });
+    } catch (error) {
+      set({
+        breedingStatusMessage: error instanceof Error ? error.message : 'Failed to record consent response.',
+      });
+    } finally {
+      set({ breedingIntentPending: false });
+    }
+  },
+
   addChildToGallery: () => {
     const result = get().breedResult;
     if (!result) return;
@@ -386,6 +477,9 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       breedingPending: false,
       savePending: false,
       breedingStatusMessage: null,
+      breedingIntent: null,
+      breedingProposal: null,
+      breedingIntentPending: false,
       birthPhase: 'merge',
       screen: 'nursery',
       preferredTraitId: null,
@@ -406,6 +500,9 @@ export const useClawStore = create<ClawStore>((set, get) => ({
       activeBreedingRunId: null,
       lastBreedingMode: null,
       breedingStatusMessage: null,
+      breedingIntent: null,
+      breedingProposal: null,
+      breedingIntentPending: false,
       birthPhase: 'merge',
       screen: 'nursery',
     });

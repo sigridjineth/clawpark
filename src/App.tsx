@@ -155,6 +155,9 @@ function App() {
     generateParentConversation,
     setPreferredTrait,
     beginBreeding,
+    createBreedingIntent,
+    createBreedingProposal,
+    respondBreedingProposalConsent,
     breedResult,
     persistChildToGallery,
     birthPhase,
@@ -162,6 +165,9 @@ function App() {
     breedingPending,
     savePending,
     breedingStatusMessage,
+    breedingIntent,
+    breedingProposal,
+    breedingIntentPending,
     clearBreedingStatus,
     homePayload,
     importPreviews,
@@ -350,7 +356,19 @@ function App() {
                   onBreed={() => {
                     void beginBreeding();
                   }}
+                  onCreateIntent={(sourceMessage) => {
+                    void createBreedingIntent(sourceMessage);
+                  }}
+                  onCreateProposal={() => {
+                    void createBreedingProposal();
+                  }}
+                  onRespondConsent={(status) => {
+                    void respondBreedingProposalConsent(status);
+                  }}
                   breedingPending={breedingPending}
+                  intentPending={breedingIntentPending}
+                  breedingIntent={breedingIntent}
+                  breedingProposal={breedingProposal}
                   prediction={prediction}
                 />
               </motion.div>
